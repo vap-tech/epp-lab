@@ -98,26 +98,6 @@ async fn send_response_recorded(
     }
 }
 
-async fn send_greeting_recorded(
-    stream: &mut TlsStream<TcpStream>,
-    limits: &super::framing::FrameLimits,
-    object_uris: &[String],
-    extension_uris: &[String],
-    db: &PgPool,
-    transaction_id: uuid::Uuid,
-) -> Result<String, super::framing::FrameError> {
-    match super::protocol::send_greeting(stream, limits, object_uris, extension_uris).await {
-        Ok(greeting) => Ok(greeting),
-        Err(error) => {
-            let delivery_error = error.to_string();
-            let _ =
-                crate::storage::session::mark_delivery_failed(db, transaction_id, &delivery_error)
-                    .await;
-            Err(error)
-        }
-    }
-}
-
 #[allow(clippy::too_many_arguments)]
 async fn handle_connection(
     stream: TcpStream,
@@ -216,19 +196,17 @@ async fn handle_connection(
             match parsed {
                 Ok(parsed) => match parsed.command {
                     crate::epp::parser::EppCommand::Hello => {
-                        let greeting = send_greeting_recorded(
-                            &mut stream,
-                            &limits,
-                            &object_uris,
-                            &extension_uris,
-                            &db,
-                            transaction_id,
-                        )
-                        .await?;
-                        response = Some(super::protocol::Response {
-                            xml: greeting,
-                            code: None,
-                        });
+                        response = Some(
+                            crate::epp::dispatch::execute_hello(
+                                &mut stream,
+                                &limits,
+                                &object_uris,
+                                &extension_uris,
+                                &db,
+                                transaction_id,
+                            )
+                            .await?,
+                        );
                     }
                     crate::epp::parser::EppCommand::Login(login) => {
                         if session_state.allows_login() {
