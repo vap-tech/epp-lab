@@ -14,12 +14,13 @@
 - Isolated service negotiation in the dispatcher and added unit coverage for
   supported and unsupported service URIs.
 - Preserved TLS failures as a separate disconnect category.
+- Added positive and negative unit coverage for Argon2 registrar authentication.
 
 ### Verified
 
 - `cargo fmt --check`
 - `cargo clippy --all-targets --all-features -- -D warnings`
-- `cargo test` (22 tests)
+- `cargo test` (25 tests)
 
 ## 2026-08-14
 
