@@ -1,42 +1,34 @@
 # Changelog
 
-Журнал содержит фактически сделанные изменения проекта. Пункты не считаются
-завершёнными только потому, что код написан: для проверенных изменений указаны
-соответствующие проверки.
+## Unreleased
 
-## [Unreleased]
-
-Пока нет незакоммиченных изменений, относящихся к проекту.
+Nothing queued yet.
 
 ## 2026-08-14
 
-### Добавлено
+### Added
 
-- Автоматический integration smoke-тест `client/run_integration.sh`. Он
-  проверяет health API, если передан `ADMIN_HEALTH_URL`, и затем выполняет
-  реальный TCP/mTLS сценарий EPP через `client/epp_smoke.py`: greeting, login,
-  hello, logout. Проверено на VPS.
-- Тесты EPP framing для EOF в заголовке и теле кадра.
-- Ограниченный graceful shutdown EPP-сервера с настраиваемым периодом ожидания
-  `EPP_SHUTDOWN_GRACE_PERIOD` (по умолчанию 10 секунд).
+- Added `client/run_integration.sh` for running the EPP smoke test against a
+  configured server.
+- Added EOF coverage for incomplete EPP frame headers and bodies.
+- Added a bounded graceful shutdown period, configurable with
+  `EPP_SHUTDOWN_GRACE_PERIOD` (10 seconds by default).
 
-### Проверено
+### Verified
 
 - `cargo fmt --check`
 - `cargo clippy --all-targets --all-features -- -D warnings`
-- `cargo test` — 20 тестов успешно
-- Реальный EPP smoke через VPS: greeting, login `1000`, hello, logout `1000`
+- `cargo test` (20 tests)
+- Live TCP/mTLS smoke test against the VPS: greeting, login, hello and logout.
 
-## История до ведения changelog
+## Earlier changes
 
-Изменения ниже уже были реализованы до появления этого файла:
-
-- `5979512` — сохранение ответа `hello` в журнале EPP-транзакций.
-- `96b1cbc` — строгая проверка EPP XML namespace.
-- `4c2abca` — проверка service negotiation при login.
-- `9050650` — покрытие полного EPP smoke-сценария.
-- `5d36f31` — dev helper для создания registrar.
-- `70a74a5` — локальный Python EPP smoke-клиент.
-- `2ae56ed` — bootstrap backend, PostgreSQL, TLS/mTLS, EPP framing,
-  session lifecycle, Admin API и начальные миграции.
+- `5979512` — persisted `hello` responses in the transaction log.
+- `96b1cbc` — validated the EPP XML namespace.
+- `4c2abca` — validated service negotiation during login.
+- `9050650` — covered the complete EPP smoke flow.
+- `5d36f31` — added a development helper for creating registrars.
+- `70a74a5` — added the local Python EPP smoke client.
+- `2ae56ed` — bootstrapped the backend, PostgreSQL schema, TLS/mTLS,
+  EPP framing, session handling, Admin API and initial migrations.
 
