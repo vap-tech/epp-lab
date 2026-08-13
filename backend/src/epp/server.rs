@@ -192,7 +192,7 @@ async fn handle_connection(
             )
             .await
             .map_err(|error| super::framing::FrameError::Write(io::Error::other(error)))?;
-            let mut response: Option<super::protocol::Response> = None;
+            let response: Option<super::protocol::Response>;
             match parsed {
                 Ok(parsed) => match parsed.command {
                     crate::epp::parser::EppCommand::Hello => {
@@ -317,34 +317,18 @@ async fn handle_connection(
                         }
                     }
                     crate::epp::parser::EppCommand::Logout => {
-                        if session_state.allows_logout() {
-                            logout_requested = true;
-                            response = Some(
-                                send_response_recorded(
-                                    &mut stream,
-                                    &limits,
-                                    &db,
-                                    transaction_id,
-                                    super::protocol::SUCCESS,
-                                    "Command completed successfully",
-                                    None,
-                                    &sv_trid,
-                                )
-                                .await?,
-                            );
-                        } else {
-                            send_response_recorded(
-                                &mut stream,
-                                &limits,
-                                &db,
-                                transaction_id,
-                                super::protocol::COMMAND_ERROR,
-                                "not authenticated",
-                                None,
-                                &sv_trid,
-                            )
-                            .await?;
-                        }
+                        let logout = crate::epp::dispatch::execute_logout(
+                            &mut stream,
+                            &limits,
+                            &db,
+                            transaction_id,
+                            &session_state,
+                            &sv_trid,
+                            cl_trid.as_deref(),
+                        )
+                        .await?;
+                        logout_requested = logout.authenticated;
+                        response = Some(logout.response);
                         should_close = true;
                     }
                 },
