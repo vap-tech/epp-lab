@@ -138,6 +138,28 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn rejects_eof_in_header() {
+        let (mut client, mut server) = duplex(32);
+        client.write_all(&[0, 0]).await.unwrap();
+        client.shutdown().await.unwrap();
+        assert!(matches!(
+            read_frame(&mut server, &limits()).await,
+            Err(FrameError::Header(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn rejects_eof_in_body() {
+        let (mut client, mut server) = duplex(32);
+        client.write_all(&[0, 0, 0, 7, b'h']).await.unwrap();
+        client.shutdown().await.unwrap();
+        assert!(matches!(
+            read_frame(&mut server, &limits()).await,
+            Err(FrameError::Body(_))
+        ));
+    }
+
+    #[tokio::test]
     async fn rejects_oversized_frame() {
         let (mut client, mut server) = duplex(32);
         client.write_all(&[0, 0, 4, 1]).await.unwrap();
