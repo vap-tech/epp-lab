@@ -92,14 +92,14 @@ async fn handle_connection(
         tokio::time::timeout(tls_handshake_timeout, acceptor.accept(stream))
             .await
             .map_err(|_| super::framing::FrameError::Timeout)?
-            .map_err(|error| super::framing::FrameError::Write(io::Error::other(error)))?;
+            .map_err(|error| super::framing::FrameError::Tls(io::Error::other(error)))?;
     let peer_certificate = stream
         .get_ref()
         .1
         .peer_certificates()
         .and_then(|certificates| certificates.first())
         .ok_or_else(|| {
-            super::framing::FrameError::Write(io::Error::other("client certificate missing"))
+            super::framing::FrameError::Tls(io::Error::other("client certificate missing"))
         })?;
     let fingerprint = hex::encode(Sha256::digest(peer_certificate.as_ref()));
     let identity = crate::storage::certificate::find_active_identity(&db, &fingerprint)
@@ -278,6 +278,7 @@ fn disconnect_reason(
     match result {
         Ok(()) => "client_closed",
         Err(super::framing::FrameError::Timeout) => "read_timeout",
+        Err(super::framing::FrameError::Tls(_)) => "tls_error",
         Err(
             super::framing::FrameError::Header(error) | super::framing::FrameError::Body(error),
         ) if error.kind() == io::ErrorKind::UnexpectedEof => "client_closed",
@@ -300,6 +301,14 @@ mod tests {
         assert_eq!(
             disconnect_reason(&Err(FrameError::Timeout), false, false),
             "read_timeout"
+        );
+        assert_eq!(
+            disconnect_reason(
+                &Err(FrameError::Tls(io::Error::other("handshake"))),
+                false,
+                false,
+            ),
+            "tls_error"
         );
         assert_eq!(
             disconnect_reason(

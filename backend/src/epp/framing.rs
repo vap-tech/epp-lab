@@ -21,6 +21,8 @@ pub enum FrameError {
     Body(#[source] io::Error),
     #[error("failed to write frame: {0}")]
     Write(#[source] io::Error),
+    #[error("TLS error: {0}")]
+    Tls(#[source] io::Error),
     #[error("frame length {0} is smaller than the EPP minimum of {MIN_FRAME_SIZE}")]
     TooShort(u32),
     #[error("frame length {length} exceeds maximum {max}")]
