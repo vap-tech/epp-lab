@@ -21,6 +21,8 @@
 - `cargo fmt --check`
 - `cargo clippy --all-targets --all-features -- -D warnings`
 - `cargo test` (25 tests)
+- VPS verification: `hello` transactions have a NULL EPP result code and
+  `delivered` status; login/logout responses retain code `1000`.
 
 ## 2026-08-14
 
