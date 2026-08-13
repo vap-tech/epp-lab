@@ -11,6 +11,9 @@
 - Added transaction delivery tracking with `delivered`, `failed`, and
   `unknown` states.
 - Made XML logging namespace-aware and removed unused registry placeholders.
+- Isolated service negotiation in the dispatcher and added unit coverage for
+  supported and unsupported service URIs.
+- Preserved TLS failures as a separate disconnect category.
 
 ### Verified
 
