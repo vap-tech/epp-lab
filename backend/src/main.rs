@@ -9,6 +9,9 @@ mod tls;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    tokio_rustls::rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .map_err(|_| anyhow::anyhow!("failed to install rustls crypto provider"))?;
     observability::init();
     let settings = config::Settings::from_env()?;
     let state = app::build_state(settings.clone()).await?;
