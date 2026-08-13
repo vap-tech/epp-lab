@@ -31,6 +31,24 @@ fn services_supported(
         })
 }
 
+fn credentials_valid(
+    registrar: Option<&crate::storage::registrar::AuthenticationRow>,
+    expected_registrar_id: uuid::Uuid,
+    password: &str,
+) -> bool {
+    registrar.is_some_and(|registrar| {
+        registrar.id == expected_registrar_id
+            && PasswordHash::new(&registrar.password_hash)
+                .ok()
+                .and_then(|hash| {
+                    Argon2::default()
+                        .verify_password(password.as_bytes(), &hash)
+                        .ok()
+                })
+                .is_some()
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn execute_hello(
     stream: &mut TlsStream<TcpStream>,
@@ -138,17 +156,7 @@ pub(crate) async fn execute_login(
                     .map_err(|error| {
                         super::framing::FrameError::Write(std::io::Error::other(error))
                     })?;
-            let valid = authentication.as_ref().is_some_and(|registrar| {
-                registrar.id == registrar_id
-                    && PasswordHash::new(&registrar.password_hash)
-                        .ok()
-                        .and_then(|hash| {
-                            Argon2::default()
-                                .verify_password(login.password.as_bytes(), &hash)
-                                .ok()
-                        })
-                        .is_some()
-            });
+            let valid = credentials_valid(authentication.as_ref(), registrar_id, &login.password);
             if valid {
                 crate::storage::session::mark_authenticated(db, session_id)
                     .await
@@ -251,6 +259,22 @@ mod tests {
             &[],
             &supported,
             &[]
+        ));
+    }
+
+    #[test]
+    fn rejects_missing_or_invalid_credentials() {
+        let registrar_id = uuid::Uuid::new_v4();
+        assert!(!credentials_valid(None, registrar_id, "secret"));
+        let row = crate::storage::registrar::AuthenticationRow {
+            id: registrar_id,
+            password_hash: "not-a-password-hash".to_owned(),
+        };
+        assert!(!credentials_valid(Some(&row), registrar_id, "secret"));
+        assert!(!credentials_valid(
+            Some(&row),
+            uuid::Uuid::new_v4(),
+            "secret"
         ));
     }
 }
