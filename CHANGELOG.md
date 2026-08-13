@@ -2,7 +2,21 @@
 
 ## Unreleased
 
-Nothing queued yet.
+### Changed
+
+- Split EPP command execution out of the connection handler into
+  `epp/dispatch.rs`.
+- Moved `hello`, `login`, `logout`, and parse-error response handling into the
+  dispatcher.
+- Added transaction delivery tracking with `delivered`, `failed`, and
+  `unknown` states.
+- Made XML logging namespace-aware and removed unused registry placeholders.
+
+### Verified
+
+- `cargo fmt --check`
+- `cargo clippy --all-targets --all-features -- -D warnings`
+- `cargo test` (22 tests)
 
 ## 2026-08-14
 
@@ -31,4 +45,3 @@ Nothing queued yet.
 - `70a74a5` — added the local Python EPP smoke client.
 - `2ae56ed` — bootstrapped the backend, PostgreSQL schema, TLS/mTLS,
   EPP framing, session handling, Admin API and initial migrations.
-
