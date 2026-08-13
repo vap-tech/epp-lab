@@ -179,6 +179,37 @@ pub(crate) async fn execute_login(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn execute_parse_error(
+    stream: &mut TlsStream<TcpStream>,
+    limits: &super::framing::FrameLimits,
+    db: &PgPool,
+    transaction_id: uuid::Uuid,
+    error: &ParseError,
+    cl_trid: Option<&str>,
+    sv_trid: &str,
+) -> Result<super::protocol::Response, super::framing::FrameError> {
+    let (code, message) = match error {
+        ParseError::Unsupported => (
+            super::protocol::COMMAND_NOT_SUPPORTED,
+            "Command not supported",
+        ),
+        _ => (2001, "Command syntax error"),
+    };
+    match super::protocol::send_response(stream, limits, code, message, cl_trid, sv_trid).await {
+        Ok(response) => Ok(response),
+        Err(error) => {
+            let _ = crate::storage::session::mark_delivery_failed(
+                db,
+                transaction_id,
+                &error.to_string(),
+            )
+            .await;
+            Err(error)
+        }
+    }
+}
+
 pub(crate) fn command_name(parsed: &Result<ParsedCommand, ParseError>) -> &'static str {
     match parsed {
         Ok(parsed) => parsed.name(),

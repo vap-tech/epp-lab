@@ -75,29 +75,6 @@ fn configure_keepalive(stream: &TcpStream, settings: &TcpSettings) -> io::Result
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn send_response_recorded(
-    stream: &mut TlsStream<TcpStream>,
-    limits: &super::framing::FrameLimits,
-    db: &PgPool,
-    transaction_id: uuid::Uuid,
-    code: u16,
-    message: &str,
-    cl_trid: Option<&str>,
-    sv_trid: &str,
-) -> Result<super::protocol::Response, super::framing::FrameError> {
-    match super::protocol::send_response(stream, limits, code, message, cl_trid, sv_trid).await {
-        Ok(response) => Ok(response),
-        Err(error) => {
-            let delivery_error = error.to_string();
-            let _ =
-                crate::storage::session::mark_delivery_failed(db, transaction_id, &delivery_error)
-                    .await;
-            Err(error)
-        }
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
 async fn handle_connection(
     stream: TcpStream,
     remote_addr: SocketAddr,
@@ -245,31 +222,15 @@ async fn handle_connection(
                         should_close = true;
                     }
                 },
-                Err(crate::epp::parser::ParseError::Unsupported) => {
+                Err(error) => {
                     response = Some(
-                        send_response_recorded(
+                        crate::epp::dispatch::execute_parse_error(
                             &mut stream,
                             &limits,
                             &db,
                             transaction_id,
-                            super::protocol::COMMAND_NOT_SUPPORTED,
-                            "Command not supported",
+                            &error,
                             cl_trid.as_deref(),
-                            &sv_trid,
-                        )
-                        .await?,
-                    );
-                }
-                Err(_) => {
-                    response = Some(
-                        send_response_recorded(
-                            &mut stream,
-                            &limits,
-                            &db,
-                            transaction_id,
-                            2001,
-                            "Command syntax error",
-                            None,
                             &sv_trid,
                         )
                         .await?,
