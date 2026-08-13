@@ -4,7 +4,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use sha2::{Digest, Sha256};
 use socket2::{SockRef, TcpKeepalive};
 use sqlx::PgPool;
@@ -209,112 +208,26 @@ async fn handle_connection(
                         );
                     }
                     crate::epp::parser::EppCommand::Login(login) => {
-                        if session_state.allows_login() {
-                            let services_supported = login
-                                .object_uris
-                                .iter()
-                                .chain(login.extension_uris.iter())
-                                .all(|uri| {
-                                    object_uris
-                                        .iter()
-                                        .chain(extension_uris.iter())
-                                        .any(|supported| supported == uri)
-                                });
-                            if !services_supported {
-                                let response = send_response_recorded(
-                                    &mut stream,
-                                    &limits,
-                                    &db,
-                                    transaction_id,
-                                    super::protocol::COMMAND_USE_ERROR,
-                                    "Requested service is not supported",
-                                    login.cl_trid.as_deref(),
-                                    &sv_trid,
-                                )
-                                .await?;
-                                let _ = crate::storage::session::finish_transaction(
-                                    &db,
-                                    transaction_id,
-                                    Some(&response.xml),
-                                    response.code.map(i32::from),
-                                    started.elapsed().as_millis() as i64,
-                                )
-                                .await;
-                                continue;
-                            }
-                            let authentication =
-                                crate::storage::registrar::find_active_by_client_id(
-                                    &db,
-                                    &login.client_id,
-                                )
-                                .await
-                                .map_err(|error| {
-                                    super::framing::FrameError::Write(io::Error::other(error))
-                                })?;
-                            let valid = authentication.as_ref().is_some_and(|registrar| {
-                                registrar.id == identity.registrar_id
-                                    && PasswordHash::new(&registrar.password_hash)
-                                        .ok()
-                                        .and_then(|hash| {
-                                            Argon2::default()
-                                                .verify_password(login.password.as_bytes(), &hash)
-                                                .ok()
-                                        })
-                                        .is_some()
-                            });
-                            if valid {
-                                crate::storage::session::mark_authenticated(&db, session_id)
-                                    .await
-                                    .map_err(|error| {
-                                        super::framing::FrameError::Write(io::Error::other(error))
-                                    })?;
-                                session_state =
-                                    crate::registry::session::SessionState::Authenticated {
-                                        registrar_id: identity.registrar_id,
-                                    };
-                                response = Some(
-                                    send_response_recorded(
-                                        &mut stream,
-                                        &limits,
-                                        &db,
-                                        transaction_id,
-                                        super::protocol::SUCCESS,
-                                        "Command completed successfully",
-                                        login.cl_trid.as_deref(),
-                                        &sv_trid,
-                                    )
-                                    .await?,
-                                );
-                            } else {
-                                response = Some(
-                                    send_response_recorded(
-                                        &mut stream,
-                                        &limits,
-                                        &db,
-                                        transaction_id,
-                                        super::protocol::AUTH_ERROR,
-                                        "Authentication error",
-                                        login.cl_trid.as_deref(),
-                                        &sv_trid,
-                                    )
-                                    .await?,
-                                );
-                            }
-                        } else {
-                            response = Some(
-                                send_response_recorded(
-                                    &mut stream,
-                                    &limits,
-                                    &db,
-                                    transaction_id,
-                                    super::protocol::COMMAND_ERROR,
-                                    "already authenticated",
-                                    login.cl_trid.as_deref(),
-                                    &sv_trid,
-                                )
-                                .await?,
-                            );
+                        let login_result = crate::epp::dispatch::execute_login(
+                            &mut stream,
+                            &limits,
+                            &db,
+                            transaction_id,
+                            session_id,
+                            &session_state,
+                            &login,
+                            identity.registrar_id,
+                            &object_uris,
+                            &extension_uris,
+                            &sv_trid,
+                        )
+                        .await?;
+                        if login_result.authenticated {
+                            session_state = crate::registry::session::SessionState::Authenticated {
+                                registrar_id: identity.registrar_id,
+                            };
                         }
+                        response = Some(login_result.response);
                     }
                     crate::epp::parser::EppCommand::Logout => {
                         let logout = crate::epp::dispatch::execute_logout(

@@ -1,9 +1,15 @@
 use super::parser::{ParseError, ParsedCommand};
+use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use sqlx::PgPool;
 use tokio::net::TcpStream;
 use tokio_rustls::server::TlsStream;
 
 pub(crate) struct LogoutResult {
+    pub response: super::protocol::Response,
+    pub authenticated: bool,
+}
+
+pub(crate) struct LoginResult {
     pub response: super::protocol::Response,
     pub authenticated: bool,
 }
@@ -70,6 +76,104 @@ pub(crate) async fn execute_logout(
             }
         };
     Ok(LogoutResult {
+        response,
+        authenticated,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn execute_login(
+    stream: &mut TlsStream<TcpStream>,
+    limits: &super::framing::FrameLimits,
+    db: &PgPool,
+    transaction_id: uuid::Uuid,
+    session_id: uuid::Uuid,
+    state: &crate::registry::session::SessionState,
+    login: &super::parser::LoginCommand,
+    registrar_id: uuid::Uuid,
+    object_uris: &[String],
+    extension_uris: &[String],
+    sv_trid: &str,
+) -> Result<LoginResult, super::framing::FrameError> {
+    let (code, message, authenticated) = if !state.allows_login() {
+        (
+            super::protocol::COMMAND_ERROR,
+            "already authenticated",
+            false,
+        )
+    } else {
+        let services_supported = login
+            .object_uris
+            .iter()
+            .chain(login.extension_uris.iter())
+            .all(|uri| {
+                object_uris
+                    .iter()
+                    .chain(extension_uris.iter())
+                    .any(|supported| supported == uri)
+            });
+        if !services_supported {
+            (
+                super::protocol::COMMAND_USE_ERROR,
+                "Requested service is not supported",
+                false,
+            )
+        } else {
+            let authentication =
+                crate::storage::registrar::find_active_by_client_id(db, &login.client_id)
+                    .await
+                    .map_err(|error| {
+                        super::framing::FrameError::Write(std::io::Error::other(error))
+                    })?;
+            let valid = authentication.as_ref().is_some_and(|registrar| {
+                registrar.id == registrar_id
+                    && PasswordHash::new(&registrar.password_hash)
+                        .ok()
+                        .and_then(|hash| {
+                            Argon2::default()
+                                .verify_password(login.password.as_bytes(), &hash)
+                                .ok()
+                        })
+                        .is_some()
+            });
+            if valid {
+                crate::storage::session::mark_authenticated(db, session_id)
+                    .await
+                    .map_err(|error| {
+                        super::framing::FrameError::Write(std::io::Error::other(error))
+                    })?;
+                (
+                    super::protocol::SUCCESS,
+                    "Command completed successfully",
+                    true,
+                )
+            } else {
+                (super::protocol::AUTH_ERROR, "Authentication error", false)
+            }
+        }
+    };
+    let response = match super::protocol::send_response(
+        stream,
+        limits,
+        code,
+        message,
+        login.cl_trid.as_deref(),
+        sv_trid,
+    )
+    .await
+    {
+        Ok(response) => response,
+        Err(error) => {
+            let _ = crate::storage::session::mark_delivery_failed(
+                db,
+                transaction_id,
+                &error.to_string(),
+            )
+            .await;
+            return Err(error);
+        }
+    };
+    Ok(LoginResult {
         response,
         authenticated,
     })
