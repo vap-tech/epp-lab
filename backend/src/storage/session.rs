@@ -49,7 +49,7 @@ pub(crate) async fn create_transaction(
     request_xml: &str,
 ) -> Result<Uuid, sqlx::Error> {
     let id = Uuid::new_v4();
-    sqlx::query("INSERT INTO epp_transactions (id, session_id, registrar_id, command, cl_trid, sv_trid, request_xml, started_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)")
+    sqlx::query("INSERT INTO epp_transactions (id, session_id, registrar_id, command, cl_trid, sv_trid, request_xml, started_at, delivery_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'unknown')")
         .bind(id).bind(session_id).bind(registrar_id).bind(command).bind(cl_trid).bind(sv_trid).bind(request_xml).bind(Utc::now()).execute(pool).await?;
     Ok(id)
 }
@@ -61,7 +61,22 @@ pub(crate) async fn finish_transaction(
     response_code: Option<i32>,
     duration_ms: i64,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query("UPDATE epp_transactions SET response_xml = $2, response_code = $3, finished_at = $4, duration_ms = $5 WHERE id = $1")
+    sqlx::query("UPDATE epp_transactions SET response_xml = $2, response_code = $3, finished_at = $4, duration_ms = $5, delivery_status = 'delivered', delivery_error = NULL WHERE id = $1")
         .bind(transaction_id).bind(response_xml).bind(response_code).bind(Utc::now()).bind(duration_ms).execute(pool).await?;
+    Ok(())
+}
+
+#[allow(dead_code)]
+pub(crate) async fn mark_delivery_failed(
+    pool: &PgPool,
+    transaction_id: Uuid,
+    error: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE epp_transactions SET delivery_status = 'failed', delivery_error = $2, finished_at = COALESCE(finished_at, $3) WHERE id = $1")
+        .bind(transaction_id)
+        .bind(error)
+        .bind(Utc::now())
+        .execute(pool)
+        .await?;
     Ok(())
 }
