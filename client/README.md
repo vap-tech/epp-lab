@@ -2,6 +2,13 @@
 
 These scripts run locally and are not deployed to the VPS.
 
+Create a development registrar through the Admin API:
+
+```bash
+export EPP_PASSWORD=demo-secret
+./client/create_dev_registrar.sh
+```
+
 Example:
 
 ```bash
