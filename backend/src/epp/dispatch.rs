@@ -277,4 +277,22 @@ mod tests {
             "secret"
         ));
     }
+
+    #[test]
+    fn accepts_matching_registrar_and_password() {
+        use argon2::password_hash::{PasswordHasher, SaltString, rand_core::OsRng};
+
+        let registrar_id = uuid::Uuid::new_v4();
+        let salt = SaltString::generate(&mut OsRng);
+        let password_hash = Argon2::default()
+            .hash_password(b"secret", &salt)
+            .unwrap()
+            .to_string();
+        let row = crate::storage::registrar::AuthenticationRow {
+            id: registrar_id,
+            password_hash,
+        };
+        assert!(credentials_valid(Some(&row), registrar_id, "secret"));
+        assert!(!credentials_valid(Some(&row), registrar_id, "wrong"));
+    }
 }
