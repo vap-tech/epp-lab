@@ -1,3 +1,4 @@
+pub(crate) mod dispatch;
 pub mod framing;
 pub(crate) mod parser;
 pub(crate) mod protocol;

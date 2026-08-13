@@ -193,11 +193,7 @@ async fn handle_connection(
             };
             let started = Instant::now();
             let parsed = crate::epp::parser::parse_command(&payload);
-            let command_name = match parsed.as_ref() {
-                Ok(parsed) => parsed.name(),
-                Err(crate::epp::parser::ParseError::Unsupported) => "unsupported",
-                Err(_) => "invalid",
-            };
+            let command_name = crate::epp::dispatch::command_name(&parsed);
             let sv_trid = format!("SIM-{}", uuid::Uuid::new_v4());
             let request_xml = crate::epp::parser::redact_password(&payload)
                 .unwrap_or_else(|_| "[UNPARSEABLE XML REDACTED]".to_owned());
