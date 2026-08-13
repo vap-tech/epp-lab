@@ -1,4 +1,4 @@
-use std::{fmt, io::Cursor};
+use std::io::Cursor;
 
 use chrono::TimeZone;
 use sha2::{Digest, Sha256};
@@ -13,21 +13,14 @@ pub(crate) struct CertificateMetadata {
     pub not_after: chrono::DateTime<chrono::Utc>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub(crate) enum CertificateError {
+    #[error("invalid PEM certificate: {0}")]
     Pem(String),
+    #[error("invalid X.509 certificate: {0}")]
     X509(String),
+    #[error("invalid certificate time: {0}")]
     Time(String),
-}
-
-impl fmt::Display for CertificateError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Pem(e) => write!(f, "invalid PEM certificate: {e}"),
-            Self::X509(e) => write!(f, "invalid X.509 certificate: {e}"),
-            Self::Time(e) => write!(f, "invalid certificate time: {e}"),
-        }
-    }
 }
 
 pub(crate) fn parse_pem(pem: &str) -> Result<CertificateMetadata, CertificateError> {
