@@ -25,6 +25,8 @@ pub(crate) enum ParseError {
     Command,
     #[error("unsupported EPP command")]
     Unsupported,
+    #[error("invalid EPP namespace")]
+    Namespace,
 }
 
 pub(crate) fn parse_command(xml: &[u8]) -> Result<EppCommand, ParseError> {
@@ -38,10 +40,25 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<EppCommand, ParseError> {
     let mut cl_trid = None;
     let mut object_uris = Vec::new();
     let mut extension_uris = Vec::new();
+    let mut root_seen = false;
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(event)) => {
                 let name = event.name().as_ref().to_vec();
+                if !root_seen {
+                    root_seen = true;
+                    if name != b"epp"
+                        || event
+                            .attributes()
+                            .flatten()
+                            .find(|attribute| attribute.key.as_ref() == b"xmlns")
+                            .and_then(|attribute| attribute.unescape_value().ok())
+                            .as_deref()
+                            != Some("urn:ietf:params:xml:ns:epp-1.0")
+                    {
+                        return Err(ParseError::Namespace);
+                    }
+                }
                 if name.ends_with(b"hello") {
                     command = Some(EppCommand::Hello);
                 }
@@ -113,14 +130,17 @@ mod tests {
     #[test]
     fn parses_hello() {
         assert_eq!(
-            parse_command(br#"<epp><command><hello/></command></epp>"#).unwrap(),
+            parse_command(
+                br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><hello/></command></epp>"#
+            )
+            .unwrap(),
             EppCommand::Hello
         );
     }
 
     #[test]
     fn parses_login() {
-        let command = parse_command(br#"<epp><command><login><clID>REG-1</clID><pw>secret</pw></login><clTRID>abc</clTRID></command></epp>"#).unwrap();
+        let command = parse_command(br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><login><clID>REG-1</clID><pw>secret</pw></login><clTRID>abc</clTRID></command></epp>"#).unwrap();
         assert_eq!(
             command,
             EppCommand::Login(LoginCommand {
@@ -136,7 +156,7 @@ mod tests {
     #[test]
     fn parses_logout() {
         assert_eq!(
-            parse_command(br#"<epp><command><logout/></command></epp>"#).unwrap(),
+            parse_command(br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><logout/></command></epp>"#).unwrap(),
             EppCommand::Logout
         );
     }
@@ -144,7 +164,7 @@ mod tests {
     #[test]
     fn rejects_login_without_password() {
         assert!(matches!(
-            parse_command(br#"<epp><command><login><clID>REG-1</clID></login></command></epp>"#),
+            parse_command(br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><login><clID>REG-1</clID></login></command></epp>"#),
             Err(ParseError::Command)
         ));
     }
@@ -152,7 +172,7 @@ mod tests {
     #[test]
     fn rejects_malformed_xml() {
         assert!(matches!(
-            parse_command(br#"<epp><command><hello></epp>"#),
+            parse_command(br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><hello></epp>"#),
             Err(ParseError::Xml(_))
         ));
     }
@@ -160,8 +180,18 @@ mod tests {
     #[test]
     fn identifies_unsupported_command() {
         assert!(matches!(
-            parse_command(br#"<epp><command><info/></command></epp>"#),
+            parse_command(
+                br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><info/></command></epp>"#
+            ),
             Err(ParseError::Unsupported)
+        ));
+    }
+
+    #[test]
+    fn rejects_wrong_namespace() {
+        assert!(matches!(
+            parse_command(br#"<epp xmlns="urn:example"><command><hello/></command></epp>"#),
+            Err(ParseError::Namespace)
         ));
     }
 }
