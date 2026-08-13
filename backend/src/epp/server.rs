@@ -364,19 +364,62 @@ async fn handle_connection(
         Ok::<(), super::framing::FrameError>(())
     }
     .await;
-    let reason = if shutdown_requested {
-        "server_shutdown"
-    } else if logout_requested {
-        "client_logout"
-    } else if result.is_ok() {
-        "client_closed"
-    } else {
-        "protocol_error"
-    };
+    let reason = disconnect_reason(&result, shutdown_requested, logout_requested);
     let _ = crate::storage::session::disconnect(&db, session_id, reason).await;
     stream
         .shutdown()
         .await
         .map_err(super::framing::FrameError::Write)?;
     result
+}
+
+fn disconnect_reason(
+    result: &Result<(), super::framing::FrameError>,
+    shutdown_requested: bool,
+    logout_requested: bool,
+) -> &'static str {
+    if shutdown_requested {
+        return "server_shutdown";
+    }
+    if logout_requested {
+        return "client_logout";
+    }
+    match result {
+        Ok(()) => "client_closed",
+        Err(super::framing::FrameError::Timeout) => "read_timeout",
+        Err(
+            super::framing::FrameError::Header(error) | super::framing::FrameError::Body(error),
+        ) if error.kind() == io::ErrorKind::UnexpectedEof => "client_closed",
+        Err(super::framing::FrameError::Write(_)) => "write_error",
+        Err(_) => "protocol_error",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::disconnect_reason;
+    use crate::epp::framing::FrameError;
+    use std::io;
+
+    #[test]
+    fn classifies_session_endings() {
+        assert_eq!(disconnect_reason(&Ok(()), false, false), "client_closed");
+        assert_eq!(disconnect_reason(&Ok(()), true, false), "server_shutdown");
+        assert_eq!(disconnect_reason(&Ok(()), false, true), "client_logout");
+        assert_eq!(
+            disconnect_reason(&Err(FrameError::Timeout), false, false),
+            "read_timeout"
+        );
+        assert_eq!(
+            disconnect_reason(
+                &Err(FrameError::Header(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "closed",
+                ))),
+                false,
+                false,
+            ),
+            "client_closed"
+        );
+    }
 }
