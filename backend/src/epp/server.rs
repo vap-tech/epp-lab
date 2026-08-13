@@ -185,6 +185,36 @@ async fn handle_connection(
                 }
                 Ok(crate::epp::parser::EppCommand::Login(login)) => {
                     if session_state.allows_login() {
+                        let services_supported = login
+                            .object_uris
+                            .iter()
+                            .chain(login.extension_uris.iter())
+                            .all(|uri| {
+                                object_uris
+                                    .iter()
+                                    .chain(extension_uris.iter())
+                                    .any(|supported| supported == uri)
+                            });
+                        if !services_supported {
+                            let response = super::protocol::send_response(
+                                &mut stream,
+                                &limits,
+                                super::protocol::COMMAND_USE_ERROR,
+                                "Requested service is not supported",
+                                login.cl_trid.as_deref(),
+                                &sv_trid,
+                            )
+                            .await?;
+                            let _ = crate::storage::session::finish_transaction(
+                                &db,
+                                transaction_id,
+                                Some(&response.xml),
+                                Some(i32::from(response.code)),
+                                started.elapsed().as_millis() as i64,
+                            )
+                            .await;
+                            continue;
+                        }
                         let authentication = crate::storage::registrar::find_active_by_client_id(
                             &db,
                             &login.client_id,

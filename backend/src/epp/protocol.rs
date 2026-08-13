@@ -7,6 +7,7 @@ pub(crate) const SUCCESS: u16 = 1000;
 pub(crate) const AUTH_ERROR: u16 = 2200;
 pub(crate) const COMMAND_ERROR: u16 = 2001;
 pub(crate) const COMMAND_NOT_SUPPORTED: u16 = 2000;
+pub(crate) const COMMAND_USE_ERROR: u16 = 2102;
 
 pub(crate) struct Response {
     #[allow(dead_code)]
