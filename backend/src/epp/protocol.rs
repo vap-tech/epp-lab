@@ -54,7 +54,7 @@ pub(crate) async fn send_greeting<S>(
     limits: &FrameLimits,
     object_uris: &[String],
     extension_uris: &[String],
-) -> Result<(), FrameError>
+) -> Result<String, FrameError>
 where
     S: AsyncWrite + Unpin,
 {
@@ -82,7 +82,8 @@ where
 </epp>"#,
         Utc::now().to_rfc3339()
     );
-    write_frame(stream, greeting.as_bytes(), limits).await
+    write_frame(stream, greeting.as_bytes(), limits).await?;
+    Ok(greeting)
 }
 
 #[allow(dead_code)]

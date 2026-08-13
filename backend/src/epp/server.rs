@@ -175,13 +175,17 @@ async fn handle_connection(
             let mut response: Option<super::protocol::Response> = None;
             match crate::epp::parser::parse_command(&payload) {
                 Ok(crate::epp::parser::EppCommand::Hello) => {
-                    super::protocol::send_greeting(
+                    let greeting = super::protocol::send_greeting(
                         &mut stream,
                         &limits,
                         &object_uris,
                         &extension_uris,
                     )
                     .await?;
+                    response = Some(super::protocol::Response {
+                        xml: greeting,
+                        code: super::protocol::SUCCESS,
+                    });
                 }
                 Ok(crate::epp::parser::EppCommand::Login(login)) => {
                     if session_state.allows_login() {
