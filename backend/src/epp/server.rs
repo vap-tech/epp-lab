@@ -193,10 +193,8 @@ async fn handle_connection(
             };
             let started = Instant::now();
             let parsed = crate::epp::parser::parse_command(&payload);
-            let command_name = match parsed.as_ref().map(|parsed| &parsed.command) {
-                Ok(crate::epp::parser::EppCommand::Hello) => "hello",
-                Ok(crate::epp::parser::EppCommand::Login(_)) => "login",
-                Ok(crate::epp::parser::EppCommand::Logout) => "logout",
+            let command_name = match parsed.as_ref() {
+                Ok(parsed) => parsed.name(),
                 Err(crate::epp::parser::ParseError::Unsupported) => "unsupported",
                 Err(_) => "invalid",
             };

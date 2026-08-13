@@ -12,6 +12,16 @@ pub(crate) enum EppCommand {
     Logout,
 }
 
+impl EppCommand {
+    pub(crate) fn name(&self) -> &'static str {
+        match self {
+            Self::Hello => "hello",
+            Self::Login(_) => "login",
+            Self::Logout => "logout",
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct LoginCommand {
     pub client_id: String,
@@ -25,6 +35,12 @@ pub(crate) struct LoginCommand {
 pub(crate) struct ParsedCommand {
     pub command: EppCommand,
     pub cl_trid: Option<String>,
+}
+
+impl ParsedCommand {
+    pub(crate) fn name(&self) -> &'static str {
+        self.command.name()
+    }
 }
 
 #[derive(Debug, Error)]
@@ -268,5 +284,14 @@ mod tests {
         let redacted = redact_password(xml).unwrap();
         assert!(!redacted.contains("secret"));
         assert!(redacted.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn exposes_protocol_command_name() {
+        let parsed = parse_command(
+            br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><hello/></command></epp>"#,
+        )
+        .unwrap();
+        assert_eq!(parsed.name(), "hello");
     }
 }
