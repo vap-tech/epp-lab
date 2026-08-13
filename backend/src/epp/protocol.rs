@@ -13,7 +13,7 @@ pub(crate) struct Response {
     #[allow(dead_code)]
     pub xml: String,
     #[allow(dead_code)]
-    pub code: u16,
+    pub code: Option<u16>,
 }
 
 pub(crate) async fn send_response<S>(
@@ -36,7 +36,7 @@ where
     write_frame(stream, response.as_bytes(), limits).await?;
     Ok(Response {
         xml: response,
-        code,
+        code: Some(code),
     })
 }
 

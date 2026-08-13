@@ -188,7 +188,7 @@ async fn handle_connection(
                         .await?;
                         response = Some(super::protocol::Response {
                             xml: greeting,
-                            code: super::protocol::SUCCESS,
+                            code: None,
                         });
                     }
                     crate::epp::parser::EppCommand::Login(login) => {
@@ -217,7 +217,7 @@ async fn handle_connection(
                                     &db,
                                     transaction_id,
                                     Some(&response.xml),
-                                    Some(i32::from(response.code)),
+                                    response.code.map(i32::from),
                                     started.elapsed().as_millis() as i64,
                                 )
                                 .await;
@@ -351,7 +351,7 @@ async fn handle_connection(
                     &db,
                     transaction_id,
                     Some(&response.xml),
-                    Some(i32::from(response.code)),
+                    response.code.map(i32::from),
                     started.elapsed().as_millis() as i64,
                 )
                 .await;
