@@ -15,6 +15,7 @@ pub struct Settings {
     pub epp_tls_handshake_timeout: Duration,
     pub epp_write_timeout: Duration,
     pub epp_idle_timeout: Option<Duration>,
+    pub epp_shutdown_grace_period: Duration,
     pub epp_max_frame_size: u32,
     pub epp_object_uris: Vec<String>,
     pub epp_extension_uris: Vec<String>,
@@ -41,6 +42,7 @@ impl Settings {
             epp_tls_handshake_timeout: seconds("EPP_TLS_HANDSHAKE_TIMEOUT", 10),
             epp_write_timeout: seconds("EPP_WRITE_TIMEOUT", 30),
             epp_idle_timeout: optional_seconds("EPP_IDLE_TIMEOUT"),
+            epp_shutdown_grace_period: seconds("EPP_SHUTDOWN_GRACE_PERIOD", 10),
             epp_max_frame_size: value("EPP_MAX_FRAME_SIZE", "1048576")
                 .parse()
                 .context("EPP_MAX_FRAME_SIZE must be an integer")?,

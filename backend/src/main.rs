@@ -22,7 +22,7 @@ async fn main() -> anyhow::Result<()> {
     )?;
     let listener = tokio::net::TcpListener::bind(settings.admin_bind).await?;
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
-    let epp_task = tokio::spawn(epp::run(
+    let mut epp_task = tokio::spawn(epp::run(
         epp::TcpSettings {
             bind: settings.epp_bind,
             frame_limits: epp::framing::FrameLimits {
@@ -47,11 +47,15 @@ async fn main() -> anyhow::Result<()> {
         result = axum::serve(listener, admin::router(state)).with_graceful_shutdown(shutdown_signal()) => {
             result?;
         }
-        result = epp_task => {
+        result = &mut epp_task => {
             result??;
         }
     }
     let _ = shutdown_tx.send(true);
+    match tokio::time::timeout(settings.epp_shutdown_grace_period, epp_task).await {
+        Ok(result) => result??,
+        Err(_) => tracing::warn!("EPP shutdown grace period elapsed"),
+    }
     Ok(())
 }
 
