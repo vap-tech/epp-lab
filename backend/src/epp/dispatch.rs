@@ -14,6 +14,23 @@ pub(crate) struct LoginResult {
     pub authenticated: bool,
 }
 
+fn services_supported(
+    requested_objects: &[String],
+    requested_extensions: &[String],
+    supported_objects: &[String],
+    supported_extensions: &[String],
+) -> bool {
+    requested_objects
+        .iter()
+        .chain(requested_extensions.iter())
+        .all(|uri| {
+            supported_objects
+                .iter()
+                .chain(supported_extensions.iter())
+                .any(|supported| supported == uri)
+        })
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn execute_hello(
     stream: &mut TlsStream<TcpStream>,
@@ -102,16 +119,12 @@ pub(crate) async fn execute_login(
             false,
         )
     } else {
-        let services_supported = login
-            .object_uris
-            .iter()
-            .chain(login.extension_uris.iter())
-            .all(|uri| {
-                object_uris
-                    .iter()
-                    .chain(extension_uris.iter())
-                    .any(|supported| supported == uri)
-            });
+        let services_supported = services_supported(
+            &login.object_uris,
+            &login.extension_uris,
+            object_uris,
+            extension_uris,
+        );
         if !services_supported {
             (
                 super::protocol::COMMAND_USE_ERROR,
@@ -226,5 +239,18 @@ mod tests {
     fn classifies_parse_results_for_logging() {
         let parsed = Err(ParseError::Unsupported);
         assert_eq!(command_name(&parsed), "unsupported");
+    }
+
+    #[test]
+    fn validates_requested_services() {
+        let requested = vec!["urn:ietf:params:xml:ns:domain-1.0".to_owned()];
+        let supported = requested.clone();
+        assert!(services_supported(&requested, &[], &supported, &[]));
+        assert!(!services_supported(
+            &["urn:example:unsupported".to_owned()],
+            &[],
+            &supported,
+            &[]
+        ));
     }
 }
