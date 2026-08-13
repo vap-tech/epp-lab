@@ -42,6 +42,9 @@ def command_xml(command: str, cl_trid: str, client_id: str | None = None, passwo
         return f'''<?xml version="1.0"?>
 <epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><logout/>
 <clTRID>{cl_trid}</clTRID></command></epp>'''.encode()
+    if command == "hello":
+        return b'''<?xml version="1.0"?>
+<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><hello/></command></epp>'''
     raise ValueError(f"unsupported command: {command}")
 
 
@@ -69,10 +72,15 @@ def main() -> None:
 
             login_client_id = "UNKNOWN-CLIENT" if args.wrong_client_id else None
             login_password = "wrong-password" if args.wrong_password else None
-            for command in ("login", "logout"):
+            for command in ("login", "hello", "logout"):
                 trid = f"client-{uuid.uuid4()}"
                 sock.sendall(frame(command_xml(command, trid, login_client_id, login_password)))
                 response = read_frame(sock)
+                if command == "hello":
+                    if "<greeting>" not in response:
+                        raise RuntimeError("hello did not return a greeting")
+                    print("hello: greeting ok")
+                    continue
                 root = ElementTree.fromstring(response)
                 result = root.find(".//{urn:ietf:params:xml:ns:epp-1.0}result")
                 code = result.attrib["code"] if result is not None else "unknown"
