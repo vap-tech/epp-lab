@@ -76,6 +76,49 @@ fn configure_keepalive(stream: &TcpStream, settings: &TcpSettings) -> io::Result
 }
 
 #[allow(clippy::too_many_arguments)]
+async fn send_response_recorded(
+    stream: &mut TlsStream<TcpStream>,
+    limits: &super::framing::FrameLimits,
+    db: &PgPool,
+    transaction_id: uuid::Uuid,
+    code: u16,
+    message: &str,
+    cl_trid: Option<&str>,
+    sv_trid: &str,
+) -> Result<super::protocol::Response, super::framing::FrameError> {
+    match super::protocol::send_response(stream, limits, code, message, cl_trid, sv_trid).await {
+        Ok(response) => Ok(response),
+        Err(error) => {
+            let delivery_error = error.to_string();
+            let _ =
+                crate::storage::session::mark_delivery_failed(db, transaction_id, &delivery_error)
+                    .await;
+            Err(error)
+        }
+    }
+}
+
+async fn send_greeting_recorded(
+    stream: &mut TlsStream<TcpStream>,
+    limits: &super::framing::FrameLimits,
+    object_uris: &[String],
+    extension_uris: &[String],
+    db: &PgPool,
+    transaction_id: uuid::Uuid,
+) -> Result<String, super::framing::FrameError> {
+    match super::protocol::send_greeting(stream, limits, object_uris, extension_uris).await {
+        Ok(greeting) => Ok(greeting),
+        Err(error) => {
+            let delivery_error = error.to_string();
+            let _ =
+                crate::storage::session::mark_delivery_failed(db, transaction_id, &delivery_error)
+                    .await;
+            Err(error)
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn handle_connection(
     stream: TcpStream,
     remote_addr: SocketAddr,
@@ -179,11 +222,13 @@ async fn handle_connection(
             match parsed {
                 Ok(parsed) => match parsed.command {
                     crate::epp::parser::EppCommand::Hello => {
-                        let greeting = super::protocol::send_greeting(
+                        let greeting = send_greeting_recorded(
                             &mut stream,
                             &limits,
                             &object_uris,
                             &extension_uris,
+                            &db,
+                            transaction_id,
                         )
                         .await?;
                         response = Some(super::protocol::Response {
@@ -204,9 +249,11 @@ async fn handle_connection(
                                         .any(|supported| supported == uri)
                                 });
                             if !services_supported {
-                                let response = super::protocol::send_response(
+                                let response = send_response_recorded(
                                     &mut stream,
                                     &limits,
+                                    &db,
+                                    transaction_id,
                                     super::protocol::COMMAND_USE_ERROR,
                                     "Requested service is not supported",
                                     login.cl_trid.as_deref(),
@@ -254,9 +301,11 @@ async fn handle_connection(
                                         registrar_id: identity.registrar_id,
                                     };
                                 response = Some(
-                                    super::protocol::send_response(
+                                    send_response_recorded(
                                         &mut stream,
                                         &limits,
+                                        &db,
+                                        transaction_id,
                                         super::protocol::SUCCESS,
                                         "Command completed successfully",
                                         login.cl_trid.as_deref(),
@@ -266,9 +315,11 @@ async fn handle_connection(
                                 );
                             } else {
                                 response = Some(
-                                    super::protocol::send_response(
+                                    send_response_recorded(
                                         &mut stream,
                                         &limits,
+                                        &db,
+                                        transaction_id,
                                         super::protocol::AUTH_ERROR,
                                         "Authentication error",
                                         login.cl_trid.as_deref(),
@@ -279,9 +330,11 @@ async fn handle_connection(
                             }
                         } else {
                             response = Some(
-                                super::protocol::send_response(
+                                send_response_recorded(
                                     &mut stream,
                                     &limits,
+                                    &db,
+                                    transaction_id,
                                     super::protocol::COMMAND_ERROR,
                                     "already authenticated",
                                     login.cl_trid.as_deref(),
@@ -295,9 +348,11 @@ async fn handle_connection(
                         if session_state.allows_logout() {
                             logout_requested = true;
                             response = Some(
-                                super::protocol::send_response(
+                                send_response_recorded(
                                     &mut stream,
                                     &limits,
+                                    &db,
+                                    transaction_id,
                                     super::protocol::SUCCESS,
                                     "Command completed successfully",
                                     None,
@@ -306,9 +361,11 @@ async fn handle_connection(
                                 .await?,
                             );
                         } else {
-                            super::protocol::send_response(
+                            send_response_recorded(
                                 &mut stream,
                                 &limits,
+                                &db,
+                                transaction_id,
                                 super::protocol::COMMAND_ERROR,
                                 "not authenticated",
                                 None,
@@ -321,9 +378,11 @@ async fn handle_connection(
                 },
                 Err(crate::epp::parser::ParseError::Unsupported) => {
                     response = Some(
-                        super::protocol::send_response(
+                        send_response_recorded(
                             &mut stream,
                             &limits,
+                            &db,
+                            transaction_id,
                             super::protocol::COMMAND_NOT_SUPPORTED,
                             "Command not supported",
                             cl_trid.as_deref(),
@@ -334,9 +393,11 @@ async fn handle_connection(
                 }
                 Err(_) => {
                     response = Some(
-                        super::protocol::send_response(
+                        send_response_recorded(
                             &mut stream,
                             &limits,
+                            &db,
+                            transaction_id,
                             2001,
                             "Command syntax error",
                             None,
