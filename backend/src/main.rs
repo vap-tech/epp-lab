@@ -54,6 +54,7 @@ async fn main() -> anyhow::Result<()> {
         tls_acceptor,
         state.db.clone(),
         state.extension_registry.clone(),
+        state.contact_authinfo_cipher.clone(),
         shutdown_rx,
     ));
     tracing::info!(address = %settings.admin_bind, "admin HTTPS API listening");

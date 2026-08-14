@@ -35,6 +35,7 @@ pub async fn run(
     acceptor: TlsAcceptor,
     db: PgPool,
     extension_registry: Arc<crate::domain::extension::ExtensionRegistry>,
+    contact_authinfo_cipher: Option<Arc<dyn crate::security::SecretCipher>>,
     mut shutdown: watch::Receiver<bool>,
 ) -> io::Result<()> {
     let listener = TcpListener::bind(settings.bind).await?;
@@ -53,9 +54,10 @@ pub async fn run(
                 let acceptor = acceptor.clone();
                 let db = db.clone();
                 let extension_registry = extension_registry.clone();
+                let contact_authinfo_cipher = contact_authinfo_cipher.clone();
                 let connection_shutdown = shutdown.clone();
                 tokio::spawn(async move {
-                    if let Err(error) = handle_connection(stream, remote_addr, limits, tls_handshake_timeout, idle_timeout, object_uris, extension_uris, extension_registry, acceptor, db, connection_shutdown).await {
+                    if let Err(error) = handle_connection(stream, remote_addr, limits, tls_handshake_timeout, idle_timeout, object_uris, extension_uris, extension_registry, contact_authinfo_cipher, acceptor, db, connection_shutdown).await {
                         tracing::debug!(%remote_addr, %error, "EPP connection closed");
                     }
                 });
@@ -87,6 +89,7 @@ async fn handle_connection(
     object_uris: Vec<String>,
     extension_uris: Vec<String>,
     extension_registry: Arc<crate::domain::extension::ExtensionRegistry>,
+    contact_authinfo_cipher: Option<Arc<dyn crate::security::SecretCipher>>,
     acceptor: TlsAcceptor,
     db: PgPool,
     mut shutdown: watch::Receiver<bool>,
@@ -246,6 +249,24 @@ async fn handle_connection(
                                 transaction_id,
                                 &session_state,
                                 &command,
+                                cl_trid.as_deref(),
+                                &sv_trid,
+                            )
+                            .await?,
+                        );
+                    }
+                    crate::epp::parser::EppCommand::Contact(
+                        crate::epp::parser::ContactCommand::Create(command),
+                    ) => {
+                        response = Some(
+                            crate::epp::dispatch::execute_contact_create(
+                                &mut stream,
+                                &limits,
+                                &db,
+                                transaction_id,
+                                contact_authinfo_cipher.as_deref(),
+                                &command,
+                                identity.registrar_id,
                                 cl_trid.as_deref(),
                                 &sv_trid,
                             )

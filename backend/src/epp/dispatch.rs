@@ -126,6 +126,63 @@ pub(crate) async fn execute_contact_check(
 }
 
 #[allow(clippy::too_many_arguments)]
+pub(crate) async fn execute_contact_create(
+    stream: &mut TlsStream<TcpStream>,
+    limits: &super::framing::FrameLimits,
+    db: &PgPool,
+    transaction_id: uuid::Uuid,
+    cipher: Option<&dyn crate::security::SecretCipher>,
+    command: &super::parser::ContactCreateCommand,
+    registrar_id: uuid::Uuid,
+    cl_trid: Option<&str>,
+    sv_trid: &str,
+) -> Result<super::protocol::Response, super::framing::FrameError> {
+    let Some(cipher) = cipher else {
+        return super::protocol::send_response(
+            stream,
+            limits,
+            super::protocol::COMMAND_ERROR,
+            "authInfo encryption is not configured",
+            cl_trid,
+            sv_trid,
+        )
+        .await;
+    };
+    let contact = crate::application::prepare_contact_create(
+        command,
+        registrar_id,
+        cipher,
+        chrono::Utc::now(),
+    )
+    .map_err(|error| super::framing::FrameError::Write(std::io::Error::other(error)))?;
+    crate::storage::contact::create(db, &contact)
+        .await
+        .map_err(|error| super::framing::FrameError::Write(std::io::Error::other(error)))?;
+    let created_at = contact.created_at.to_rfc3339();
+    match super::protocol::send_contact_create(
+        stream,
+        limits,
+        contact.roid.as_str(),
+        &created_at,
+        cl_trid,
+        sv_trid,
+    )
+    .await
+    {
+        Ok(response) => Ok(response),
+        Err(error) => {
+            let _ = crate::storage::session::mark_delivery_failed(
+                db,
+                transaction_id,
+                &error.to_string(),
+            )
+            .await;
+            Err(error)
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn execute_logout(
     stream: &mut TlsStream<TcpStream>,
     limits: &super::framing::FrameLimits,

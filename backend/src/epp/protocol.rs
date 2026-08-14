@@ -124,6 +124,32 @@ where
     })
 }
 
+pub(crate) async fn send_contact_create<S>(
+    stream: &mut S,
+    limits: &FrameLimits,
+    id: &str,
+    created_at: &str,
+    cl_trid: Option<&str>,
+    sv_trid: &str,
+) -> Result<Response, FrameError>
+where
+    S: AsyncWrite + Unpin,
+{
+    let trid = cl_trid
+        .map(|value| format!("<clTRID>{}</clTRID>", escape_xml(value)))
+        .unwrap_or_default();
+    let response = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?><epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><response><result code="1000"><msg>Command completed successfully</msg></result><resData><contact:creData xmlns:contact="urn:ietf:params:xml:ns:contact-1.0"><contact:id>{}</contact:id><contact:crDate>{created_at}</contact:crDate></contact:creData></resData>{trid}<svTRID>{sv_trid}</svTRID></response></epp>"#,
+        escape_xml(id)
+    );
+    write_frame(stream, response.as_bytes(), limits).await?;
+    Ok(Response {
+        persisted_xml: response.clone(),
+        xml: response,
+        code: Some(SUCCESS),
+    })
+}
+
 #[allow(dead_code)]
 async fn _read_marker<S: AsyncRead + Unpin>(_stream: &mut S) {}
 
