@@ -9,6 +9,10 @@ impl ZoneId {
     pub fn new(value: Uuid) -> Self {
         Self(value)
     }
+
+    pub fn into_uuid(self) -> Uuid {
+        self.0
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
