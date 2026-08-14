@@ -80,7 +80,9 @@ pub(crate) fn prepare_contact_create(
             fields: Default::default(),
         },
         client_statuses: Default::default(),
-        server_statuses: [ContactStatus::PendingCreate].into_iter().collect(),
+        // contact:create is committed synchronously in this stage.  A pending
+        // status would claim an asynchronous lifecycle that does not exist.
+        server_statuses: [ContactStatus::Ok].into_iter().collect(),
         sponsoring_registrar_id: registrar_id,
         created_by: registrar_id,
         created_at: now,
@@ -251,6 +253,16 @@ mod tests {
         assert_eq!(
             crate::security::SecretCipher::decrypt(&cipher, &contact.auth_info).unwrap(),
             command.auth_info.as_bytes()
+        );
+        assert!(
+            contact
+                .server_statuses
+                .contains(&crate::domain::contact::ContactStatus::Ok)
+        );
+        assert!(
+            !contact
+                .server_statuses
+                .contains(&crate::domain::contact::ContactStatus::PendingCreate)
         );
     }
 }
