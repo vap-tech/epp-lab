@@ -144,6 +144,34 @@ pub(crate) async fn delete(pool: &PgPool, id: Uuid) -> Result<bool, sqlx::Error>
     Ok(result.rows_affected() == 1)
 }
 
+pub(crate) async fn update_email_auth(
+    pool: &PgPool,
+    id: Uuid,
+    email: Option<&str>,
+    auth_info_ciphertext: Option<&str>,
+) -> Result<bool, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    let result = sqlx::query(
+        "UPDATE contacts c SET auth_info_ciphertext = COALESCE($2, c.auth_info_ciphertext), updated_at = NOW() WHERE c.id = $1",
+    )
+    .bind(id)
+    .bind(auth_info_ciphertext)
+    .execute(&mut *tx)
+    .await?;
+    if result.rows_affected() == 0 {
+        return Ok(false);
+    }
+    if let Some(email) = email {
+        sqlx::query("UPDATE contact_phones SET email = $2 WHERE contact_id = $1")
+            .bind(id)
+            .bind(email)
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
+    Ok(true)
+}
+
 #[allow(dead_code)]
 pub(crate) async fn create_identity(
     pool: &PgPool,

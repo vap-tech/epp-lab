@@ -308,14 +308,18 @@ async fn handle_connection(
                             .await?,
                         );
                     }
-                    crate::epp::parser::EppCommand::Contact(_) => {
+                    crate::epp::parser::EppCommand::Contact(
+                        crate::epp::parser::ContactCommand::Update(command),
+                    ) => {
                         response = Some(
-                            crate::epp::dispatch::execute_parse_error(
+                            crate::epp::dispatch::execute_contact_update(
                                 &mut stream,
                                 &limits,
                                 &db,
                                 transaction_id,
-                                &crate::epp::parser::ParseError::Unsupported,
+                                contact_authinfo_cipher.as_deref(),
+                                &command,
+                                identity.registrar_id,
                                 cl_trid.as_deref(),
                                 &sv_trid,
                             )

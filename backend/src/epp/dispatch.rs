@@ -321,6 +321,82 @@ pub(crate) async fn execute_contact_delete(
 }
 
 #[allow(clippy::too_many_arguments)]
+pub(crate) async fn execute_contact_update(
+    stream: &mut TlsStream<TcpStream>,
+    limits: &super::framing::FrameLimits,
+    db: &PgPool,
+    _transaction_id: uuid::Uuid,
+    cipher: Option<&dyn crate::security::SecretCipher>,
+    command: &super::parser::ContactUpdateCommand,
+    registrar_id: uuid::Uuid,
+    cl_trid: Option<&str>,
+    sv_trid: &str,
+) -> Result<super::protocol::Response, super::framing::FrameError> {
+    let Some(identity) = crate::storage::contact::find_identity_by_roid(db, &command.id)
+        .await
+        .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?
+    else {
+        return super::protocol::send_response(
+            stream,
+            limits,
+            2303,
+            "object does not exist",
+            cl_trid,
+            sv_trid,
+        )
+        .await;
+    };
+    if identity.sponsoring_registrar_id != registrar_id {
+        return super::protocol::send_response(
+            stream,
+            limits,
+            2201,
+            "authorization error",
+            cl_trid,
+            sv_trid,
+        )
+        .await;
+    }
+    let auth = match &command.chg_auth_info {
+        crate::domain::contact::Patch::Set(value) => {
+            let Some(cipher) = cipher else {
+                return super::protocol::send_response(
+                    stream,
+                    limits,
+                    super::protocol::COMMAND_ERROR,
+                    "authInfo encryption is not configured",
+                    cl_trid,
+                    sv_trid,
+                )
+                .await;
+            };
+            Some(
+                cipher
+                    .encrypt(value.as_bytes())
+                    .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?,
+            )
+        }
+        _ => None,
+    };
+    let email = match &command.chg_email {
+        crate::domain::contact::Patch::Set(value) => Some(value.as_str()),
+        _ => None,
+    };
+    crate::storage::contact::update_email_auth(db, identity.id, email, auth.as_deref())
+        .await
+        .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?;
+    super::protocol::send_response(
+        stream,
+        limits,
+        super::protocol::SUCCESS,
+        "Command completed successfully",
+        cl_trid,
+        sv_trid,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn execute_logout(
     stream: &mut TlsStream<TcpStream>,
     limits: &super::framing::FrameLimits,
