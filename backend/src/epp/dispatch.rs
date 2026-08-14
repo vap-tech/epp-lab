@@ -460,9 +460,29 @@ pub(crate) async fn execute_contact_update(
         crate::domain::contact::Patch::Set(value) => Some(value.as_str()),
         _ => None,
     };
-    crate::storage::contact::update_email_auth(db, identity.id, email, auth.as_deref())
-        .await
-        .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?;
+    let voice = match &command.chg_voice {
+        crate::domain::contact::Patch::Set(value) => Some(value.as_str()),
+        _ => None,
+    };
+    let fax = match &command.chg_fax {
+        crate::domain::contact::Patch::Set(value) => Some(value.as_str()),
+        _ => None,
+    };
+    let organization = match &command.chg_organization {
+        crate::domain::contact::Patch::Set(value) => Some(value.as_str()),
+        _ => None,
+    };
+    crate::storage::contact::update_email_auth(
+        db,
+        identity.id,
+        email,
+        auth.as_deref(),
+        voice,
+        fax,
+        organization,
+    )
+    .await
+    .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?;
     super::protocol::send_response(
         stream,
         limits,

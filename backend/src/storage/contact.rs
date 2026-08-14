@@ -149,6 +149,9 @@ pub(crate) async fn update_email_auth(
     id: Uuid,
     email: Option<&str>,
     auth_info_ciphertext: Option<&str>,
+    voice: Option<&str>,
+    fax: Option<&str>,
+    organization: Option<&str>,
 ) -> Result<bool, sqlx::Error> {
     let mut tx = pool.begin().await?;
     let result = sqlx::query(
@@ -161,12 +164,13 @@ pub(crate) async fn update_email_auth(
     if result.rows_affected() == 0 {
         return Ok(false);
     }
-    if let Some(email) = email {
-        sqlx::query("UPDATE contact_phones SET email = $2 WHERE contact_id = $1")
-            .bind(id)
-            .bind(email)
-            .execute(&mut *tx)
-            .await?;
+    if email.is_some() || voice.is_some() || fax.is_some() {
+        sqlx::query("UPDATE contact_phones SET email = COALESCE($2, email), voice = COALESCE($3, voice), fax = COALESCE($4, fax) WHERE contact_id = $1")
+            .bind(id).bind(email).bind(voice).bind(fax).execute(&mut *tx).await?;
+    }
+    if let Some(organization) = organization {
+        sqlx::query("UPDATE contact_postal_info SET organization = $2 WHERE contact_id = $1 AND info_type = 'international'")
+            .bind(id).bind(organization).execute(&mut *tx).await?;
     }
     tx.commit().await?;
     Ok(true)
