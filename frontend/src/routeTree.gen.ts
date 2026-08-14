@@ -15,6 +15,8 @@ import { Route as LayoutIndexRouteImport } from './routes/_layout/index'
 import { Route as LayoutRegistrarsRouteImport } from './routes/_layout/registrars'
 import { Route as LayoutSessionsRouteImport } from './routes/_layout/sessions'
 import { Route as LayoutTransactionsRouteImport } from './routes/_layout/transactions'
+import { Route as LayoutSessionsSessionIdRouteImport } from './routes/_layout/sessions/$sessionId'
+import { Route as LayoutTransactionsTransactionIdRouteImport } from './routes/_layout/transactions/$transactionId'
 
 const LayoutRoute = LayoutRouteImport.update({
   id: '/_layout',
@@ -45,35 +47,66 @@ const LayoutTransactionsRoute = LayoutTransactionsRouteImport.update({
   path: '/transactions',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutSessionsSessionIdRoute = LayoutSessionsSessionIdRouteImport.update({
+  id: '/$sessionId',
+  path: '/$sessionId',
+  getParentRoute: () => LayoutSessionsRoute,
+} as any)
+const LayoutTransactionsTransactionIdRoute =
+  LayoutTransactionsTransactionIdRouteImport.update({
+    id: '/$transactionId',
+    path: '/$transactionId',
+    getParentRoute: () => LayoutTransactionsRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof LayoutIndexRoute
   '/login': typeof LoginRoute
   '/registrars': typeof LayoutRegistrarsRoute
-  '/sessions': typeof LayoutSessionsRoute
-  '/transactions': typeof LayoutTransactionsRoute
+  '/sessions': typeof LayoutSessionsRouteWithChildren
+  '/transactions': typeof LayoutTransactionsRouteWithChildren
+  '/sessions/$sessionId': typeof LayoutSessionsSessionIdRoute
+  '/transactions/$transactionId': typeof LayoutTransactionsTransactionIdRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/registrars': typeof LayoutRegistrarsRoute
-  '/sessions': typeof LayoutSessionsRoute
-  '/transactions': typeof LayoutTransactionsRoute
+  '/sessions': typeof LayoutSessionsRouteWithChildren
+  '/transactions': typeof LayoutTransactionsRouteWithChildren
   '/': typeof LayoutIndexRoute
+  '/sessions/$sessionId': typeof LayoutSessionsSessionIdRoute
+  '/transactions/$transactionId': typeof LayoutTransactionsTransactionIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_layout': typeof LayoutRouteWithChildren
   '/login': typeof LoginRoute
   '/_layout/registrars': typeof LayoutRegistrarsRoute
-  '/_layout/sessions': typeof LayoutSessionsRoute
-  '/_layout/transactions': typeof LayoutTransactionsRoute
+  '/_layout/sessions': typeof LayoutSessionsRouteWithChildren
+  '/_layout/transactions': typeof LayoutTransactionsRouteWithChildren
   '/_layout/': typeof LayoutIndexRoute
+  '/_layout/sessions/$sessionId': typeof LayoutSessionsSessionIdRoute
+  '/_layout/transactions/$transactionId': typeof LayoutTransactionsTransactionIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/registrars' | '/sessions' | '/transactions'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/registrars'
+    | '/sessions'
+    | '/transactions'
+    | '/sessions/$sessionId'
+    | '/transactions/$transactionId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/login' | '/registrars' | '/sessions' | '/transactions' | '/'
+  to:
+    | '/login'
+    | '/registrars'
+    | '/sessions'
+    | '/transactions'
+    | '/'
+    | '/sessions/$sessionId'
+    | '/transactions/$transactionId'
   id:
     | '__root__'
     | '/_layout'
@@ -82,6 +115,8 @@ export interface FileRouteTypes {
     | '/_layout/sessions'
     | '/_layout/transactions'
     | '/_layout/'
+    | '/_layout/sessions/$sessionId'
+    | '/_layout/transactions/$transactionId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -133,20 +168,57 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutTransactionsRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/sessions/$sessionId': {
+      id: '/_layout/sessions/$sessionId'
+      path: '/$sessionId'
+      fullPath: '/sessions/$sessionId'
+      preLoaderRoute: typeof LayoutSessionsSessionIdRouteImport
+      parentRoute: typeof LayoutSessionsRoute
+    }
+    '/_layout/transactions/$transactionId': {
+      id: '/_layout/transactions/$transactionId'
+      path: '/$transactionId'
+      fullPath: '/transactions/$transactionId'
+      preLoaderRoute: typeof LayoutTransactionsTransactionIdRouteImport
+      parentRoute: typeof LayoutTransactionsRoute
+    }
   }
 }
 
+interface LayoutSessionsRouteChildren {
+  LayoutSessionsSessionIdRoute: typeof LayoutSessionsSessionIdRoute
+}
+
+const LayoutSessionsRouteChildren: LayoutSessionsRouteChildren = {
+  LayoutSessionsSessionIdRoute: LayoutSessionsSessionIdRoute,
+}
+
+const LayoutSessionsRouteWithChildren = LayoutSessionsRoute._addFileChildren(
+  LayoutSessionsRouteChildren,
+)
+
+interface LayoutTransactionsRouteChildren {
+  LayoutTransactionsTransactionIdRoute: typeof LayoutTransactionsTransactionIdRoute
+}
+
+const LayoutTransactionsRouteChildren: LayoutTransactionsRouteChildren = {
+  LayoutTransactionsTransactionIdRoute: LayoutTransactionsTransactionIdRoute,
+}
+
+const LayoutTransactionsRouteWithChildren =
+  LayoutTransactionsRoute._addFileChildren(LayoutTransactionsRouteChildren)
+
 interface LayoutRouteChildren {
   LayoutRegistrarsRoute: typeof LayoutRegistrarsRoute
-  LayoutSessionsRoute: typeof LayoutSessionsRoute
-  LayoutTransactionsRoute: typeof LayoutTransactionsRoute
+  LayoutSessionsRoute: typeof LayoutSessionsRouteWithChildren
+  LayoutTransactionsRoute: typeof LayoutTransactionsRouteWithChildren
   LayoutIndexRoute: typeof LayoutIndexRoute
 }
 
 const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutRegistrarsRoute: LayoutRegistrarsRoute,
-  LayoutSessionsRoute: LayoutSessionsRoute,
-  LayoutTransactionsRoute: LayoutTransactionsRoute,
+  LayoutSessionsRoute: LayoutSessionsRouteWithChildren,
+  LayoutTransactionsRoute: LayoutTransactionsRouteWithChildren,
   LayoutIndexRoute: LayoutIndexRoute,
 }
 
