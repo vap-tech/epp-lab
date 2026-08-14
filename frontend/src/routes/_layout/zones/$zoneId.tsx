@@ -46,7 +46,7 @@ function ZoneDetail() {
           />
         </div>
       </div>
-      <div className="grid max-w-3xl gap-x-12 gap-y-3 text-sm sm:grid-cols-2">
+      <div className="grid max-w-5xl gap-x-8 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
         <div>
           <span className="text-muted-foreground">Canonical name</span>
           <p className="font-mono">{zone.ascii_name}</p>
