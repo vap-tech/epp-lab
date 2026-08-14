@@ -19,7 +19,7 @@ pub(crate) enum EppCommand {
 pub(crate) enum ContactCommand {
     Check(ContactCheckCommand),
     Create(ContactCreateCommand),
-    Info,
+    Info(ContactInfoCommand),
     Update,
     Delete,
 }
@@ -27,6 +27,11 @@ pub(crate) enum ContactCommand {
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct ContactCheckCommand {
     pub ids: Vec<String>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct ContactInfoCommand {
+    pub id: String,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -55,7 +60,7 @@ impl EppCommand {
             Self::Logout => "logout",
             Self::Contact(ContactCommand::Check(_)) => "contact:check",
             Self::Contact(ContactCommand::Create(_)) => "contact:create",
-            Self::Contact(ContactCommand::Info) => "contact:info",
+            Self::Contact(ContactCommand::Info(_)) => "contact:info",
             Self::Contact(ContactCommand::Update) => "contact:update",
             Self::Contact(ContactCommand::Delete) => "contact:delete",
         }
@@ -167,7 +172,9 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                         },
                     )));
                 } else if name.ends_with(b"info") {
-                    command = Some(EppCommand::Contact(ContactCommand::Info));
+                    command = Some(EppCommand::Contact(ContactCommand::Info(
+                        ContactInfoCommand { id: String::new() },
+                    )));
                 } else if name.ends_with(b"update") {
                     command = Some(EppCommand::Contact(ContactCommand::Update));
                 } else if name.ends_with(b"delete") {
@@ -303,6 +310,13 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                 cl_trid,
             })
         }
+        Some(EppCommand::Contact(ContactCommand::Info(mut info))) => {
+            info.id = contact_ids.first().cloned().ok_or(ParseError::Command)?;
+            Ok(ParsedCommand {
+                command: EppCommand::Contact(ContactCommand::Info(info)),
+                cl_trid,
+            })
+        }
         Some(EppCommand::Contact(contact)) => Ok(ParsedCommand {
             command: EppCommand::Contact(contact),
             cl_trid,
@@ -399,7 +413,7 @@ mod tests {
     #[test]
     fn recognizes_contact_commands_without_implementing_business_logic() {
         let parsed = parse_command(
-            br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><info xmlns:contact="urn:ietf:params:xml:ns:contact-1.0"><contact:info/></info></command></epp>"#,
+            br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><info xmlns:contact="urn:ietf:params:xml:ns:contact-1.0"><contact:info><contact:id>C123</contact:id></contact:info></info></command></epp>"#,
         )
         .unwrap();
         assert_eq!(parsed.name(), "contact:info");
