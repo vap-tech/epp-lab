@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Moved Zone creation, status changes and contact policy mutations behind the
+  application boundary, keeping HTTP handlers focused on adapter concerns.
 - Connected EPP greeting and login service negotiation to the active Zone
   extension assignments through an application-level capability boundary,
   while retaining configured extension URIs as a compatibility fallback.

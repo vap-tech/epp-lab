@@ -89,22 +89,11 @@ pub(crate) async fn create(
     State(state): State<Arc<AppState>>,
     Json(request): Json<CreateZoneRequest>,
 ) -> Result<(StatusCode, Json<ZoneResponse>), StatusCode> {
-    let name = crate::domain::zone::ZoneName::parse(request.name.trim())
-        .map_err(|_| StatusCode::BAD_REQUEST)?;
-    let zone = crate::domain::zone::Zone {
-        id: crate::domain::zone::ZoneId::new(Uuid::new_v4()),
-        name,
-        status: crate::domain::zone::ZoneStatus::Active,
-        contact_policy: Default::default(),
-    };
-    zone::create(&state.db, &zone, chrono::Utc::now())
+    let zone = crate::application::create_zone(&state.db, request.name.trim(), chrono::Utc::now())
         .await
         .map_err(|error| match error {
-            sqlx::Error::Database(database_error)
-                if database_error.constraint() == Some("zones_ascii_name_key") =>
-            {
-                StatusCode::CONFLICT
-            }
+            crate::application::ZoneCommandError::InvalidName(_) => StatusCode::BAD_REQUEST,
+            crate::application::ZoneCommandError::AlreadyExists => StatusCode::CONFLICT,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         })?;
     let row = zone::find(&state.db, zone.id.into_uuid())
@@ -146,12 +135,17 @@ pub(crate) async fn update(
     if !matches!(request.status.as_str(), "active" | "disabled") {
         return Err(StatusCode::BAD_REQUEST);
     }
-    if !zone::update_status(&state.db, id, &request.status, chrono::Utc::now())
+    let status = match request.status.as_str() {
+        "active" => crate::domain::zone::ZoneStatus::Active,
+        "disabled" => crate::domain::zone::ZoneStatus::Disabled,
+        _ => return Err(StatusCode::BAD_REQUEST),
+    };
+    crate::application::update_zone_status(&state.db, id, status, chrono::Utc::now())
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    {
-        return Err(StatusCode::NOT_FOUND);
-    }
+        .map_err(|error| match error {
+            crate::application::ZoneCommandError::NotFound => StatusCode::NOT_FOUND,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        })?;
     get(_session, Path(id), State(state)).await
 }
 
@@ -176,12 +170,12 @@ pub(crate) async fn update_contact_policy(
         tech: parse_requirement(&request.tech).map_err(|_| StatusCode::BAD_REQUEST)?,
         billing: parse_requirement(&request.billing).map_err(|_| StatusCode::BAD_REQUEST)?,
     };
-    if !zone::update_contact_policy(&state.db, id, policy, chrono::Utc::now())
+    crate::application::update_zone_contact_policy(&state.db, id, policy, chrono::Utc::now())
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    {
-        return Err(StatusCode::NOT_FOUND);
-    }
+        .map_err(|error| match error {
+            crate::application::ZoneCommandError::NotFound => StatusCode::NOT_FOUND,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        })?;
     get(_session, Path(id), State(state)).await
 }
 

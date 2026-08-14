@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use thiserror::Error;
 
@@ -7,6 +8,78 @@ use crate::{
     domain::extension::{ExtensionKey, ExtensionRegistry, ZoneExtensionAssignment},
     storage::zone,
 };
+
+#[derive(Debug, Error)]
+pub(crate) enum ZoneCommandError {
+    #[error("invalid zone name: {0}")]
+    InvalidName(String),
+    #[error("zone already exists")]
+    AlreadyExists,
+    #[error("zone not found")]
+    NotFound,
+    #[error("database error: {0}")]
+    Database(#[source] sqlx::Error),
+}
+
+pub(crate) async fn create_zone(
+    db: &PgPool,
+    name: &str,
+    now: DateTime<Utc>,
+) -> Result<crate::domain::zone::Zone, ZoneCommandError> {
+    let zone = crate::domain::zone::Zone {
+        id: crate::domain::zone::ZoneId::new(uuid::Uuid::new_v4()),
+        name: crate::domain::zone::ZoneName::parse(name)
+            .map_err(|error| ZoneCommandError::InvalidName(error.to_string()))?,
+        status: crate::domain::zone::ZoneStatus::Active,
+        contact_policy: Default::default(),
+    };
+    zone::create(db, &zone, now).await.map_err(|error| {
+        if let sqlx::Error::Database(database_error) = &error
+            && database_error.constraint() == Some("zones_ascii_name_key")
+        {
+            ZoneCommandError::AlreadyExists
+        } else {
+            ZoneCommandError::Database(error)
+        }
+    })?;
+    Ok(zone)
+}
+
+pub(crate) async fn update_zone_status(
+    db: &PgPool,
+    id: uuid::Uuid,
+    status: crate::domain::zone::ZoneStatus,
+    now: DateTime<Utc>,
+) -> Result<(), ZoneCommandError> {
+    let value = match status {
+        crate::domain::zone::ZoneStatus::Active => "active",
+        crate::domain::zone::ZoneStatus::Disabled => "disabled",
+    };
+    if zone::update_status(db, id, value, now)
+        .await
+        .map_err(ZoneCommandError::Database)?
+    {
+        Ok(())
+    } else {
+        Err(ZoneCommandError::NotFound)
+    }
+}
+
+pub(crate) async fn update_zone_contact_policy(
+    db: &PgPool,
+    id: uuid::Uuid,
+    policy: crate::domain::zone::ContactUsagePolicy,
+    now: DateTime<Utc>,
+) -> Result<(), ZoneCommandError> {
+    if zone::update_contact_policy(db, id, policy, now)
+        .await
+        .map_err(ZoneCommandError::Database)?
+    {
+        Ok(())
+    } else {
+        Err(ZoneCommandError::NotFound)
+    }
+}
 
 #[derive(Debug, Error)]
 pub(crate) enum CapabilityError {
