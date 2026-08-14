@@ -1,0 +1,30 @@
+# Local ignore rules
+.gitignore
+AGENTS.md
+ARCHITECTURE.md
+tz.md
+tz2.md
+frontend/AGENTS.md
+
+# Rust / Cargo
+target/
+Cargo.lock
+backend/app/
+
+# Environment and local secrets
+.env
+.env.*
+!.env.example
+
+# IDE and editor files
+.zed/
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python local tooling
+__pycache__/
+*.py[cod]
