@@ -71,3 +71,11 @@ export async function getTransactions(pageNumber = 1) {
     ),
   )
 }
+export async function getSession(id: string) {
+  return sessionSchema.parse(await api.get<EppSession>(`/epp/sessions/${id}`))
+}
+export async function getTransaction(id: string) {
+  return transactionSchema.parse(
+    await api.get<EppTransaction>(`/epp/transactions/${id}`),
+  )
+}
