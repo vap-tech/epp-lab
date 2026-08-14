@@ -31,54 +31,42 @@ function ZoneDetail() {
 
   return (
     <section className="flex flex-col gap-6">
-      <div>
+      <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-bold tracking-tight">{zone.ascii_name}</h1>
-        {zone.unicode_name !== zone.ascii_name ? (
-          <p className="text-muted-foreground">{zone.unicode_name}</p>
-        ) : null}
+        <div className="flex items-center gap-3">
+          <Badge variant={zone.status === "active" ? "default" : "secondary"}>
+            {zone.status}
+          </Badge>
+          <Switch
+            checked={zone.status === "active"}
+            aria-label="Zone active"
+            onCheckedChange={(checked) =>
+              mutations.status.mutate(checked ? "active" : "disabled")
+            }
+          />
+        </div>
+      </div>
+      <div className="grid max-w-3xl gap-x-12 gap-y-3 text-sm sm:grid-cols-2">
+        <div>
+          <span className="text-muted-foreground">Canonical name</span>
+          <p className="font-mono">{zone.ascii_name}</p>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Unicode name</span>
+          <p>{zone.unicode_name}</p>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Created</span>
+          <p>{new Date(zone.created_at).toLocaleString()}</p>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Updated</span>
+          <p>{new Date(zone.updated_at).toLocaleString()}</p>
+        </div>
       </div>
       <section className="rounded-lg border p-6">
-        <h2 className="font-semibold">General</h2>
-        <div className="mt-4 grid max-w-3xl gap-4 sm:grid-cols-2">
-          <div>
-            <p className="text-sm text-muted-foreground">Canonical name</p>
-            <p className="font-mono">{zone.ascii_name}</p>
-          </div>
-          <div>
-            <p className="text-sm text-muted-foreground">Unicode name</p>
-            <p>{zone.unicode_name}</p>
-          </div>
-          <div>
-            <p className="text-sm text-muted-foreground">Status</p>
-            <Badge variant={zone.status === "active" ? "default" : "secondary"}>
-              {zone.status}
-            </Badge>
-          </div>
-          <div>
-            <p className="text-sm text-muted-foreground">Created</p>
-            <p>{new Date(zone.created_at).toLocaleString()}</p>
-          </div>
-          <div>
-            <p className="text-sm text-muted-foreground">Updated</p>
-            <p>{new Date(zone.updated_at).toLocaleString()}</p>
-          </div>
-        </div>
-      </section>
-      <section className="rounded-lg border p-6">
-        <div className="flex items-center justify-between gap-4">
-          <h2 className="font-semibold">Contact Usage</h2>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span>Active</span>
-            <Switch
-              checked={zone.status === "active"}
-              aria-label="Zone active"
-              onCheckedChange={(checked) =>
-                mutations.status.mutate(checked ? "active" : "disabled")
-              }
-            />
-          </div>
-        </div>
-        <div className="mt-4 grid max-w-3xl gap-x-12 gap-y-3 sm:grid-cols-2">
+        <h2 className="font-semibold">Contact Usage</h2>
+        <div className="mt-4 flex max-w-xl flex-col gap-3">
           <PolicySelect
             label="Registrant"
             value={zone.contact_policy.registrant}
