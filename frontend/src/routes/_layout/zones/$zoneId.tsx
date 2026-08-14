@@ -32,11 +32,10 @@ function ZoneDetail() {
   return (
     <section className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold tracking-tight">{zone.ascii_name}</h1>
         <div className="flex items-center gap-3">
-          <Badge variant={zone.status === "active" ? "default" : "secondary"}>
-            {zone.status}
-          </Badge>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {zone.ascii_name}
+          </h1>
           <Switch
             checked={zone.status === "active"}
             aria-label="Zone active"
@@ -45,6 +44,9 @@ function ZoneDetail() {
             }
           />
         </div>
+        <Badge variant={zone.status === "active" ? "default" : "secondary"}>
+          {zone.status}
+        </Badge>
       </div>
       <div className="grid max-w-5xl gap-x-8 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
         <div>
