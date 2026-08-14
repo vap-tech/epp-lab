@@ -12,17 +12,21 @@ import { useEppSessions } from "@/hooks/useEpp"
 
 export const Route = createFileRoute("/_layout/sessions")({
   component: Sessions,
-  validateSearch: z.object({ page: z.coerce.number().int().min(1).catch(1) }),
+  validateSearch: z.object({
+    page: z.coerce.number().int().min(1).catch(1),
+    state: z.string().optional(),
+    remote_addr: z.string().optional(),
+  }),
   head: () => ({ meta: [{ title: "EPP Sessions - EPP Lab" }] }),
 })
 
 function Sessions() {
-  const { page } = Route.useSearch()
+  const { page, state, remote_addr } = Route.useSearch()
   const navigate = Route.useNavigate()
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   })
-  const query = useEppSessions(page)
+  const query = useEppSessions(page, { state, remote_addr })
   if (pathname !== "/sessions") return <Outlet />
   return (
     <section className="flex flex-col gap-6">
@@ -36,6 +40,41 @@ function Sessions() {
         <Button variant="outline" onClick={() => query.refetch()}>
           Refresh
         </Button>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <input
+          className="h-9 rounded-md border bg-background px-3 text-sm"
+          placeholder="Search remote address"
+          defaultValue={remote_addr}
+          onKeyDown={(event) => {
+            if (event.key === "Enter")
+              navigate({
+                search: {
+                  page: 1,
+                  state,
+                  remote_addr: event.currentTarget.value || undefined,
+                },
+              })
+          }}
+        />
+        <select
+          className="h-9 rounded-md border bg-background px-3 text-sm"
+          value={state ?? ""}
+          onChange={(event) =>
+            navigate({
+              search: {
+                page: 1,
+                state: event.target.value || undefined,
+                remote_addr,
+              },
+            })
+          }
+        >
+          <option value="">All states</option>
+          <option value="connected">connected</option>
+          <option value="authenticated">authenticated</option>
+          <option value="closed">closed</option>
+        </select>
       </div>
       {query.isPending ? (
         <p className="text-muted-foreground">Loading sessions…</p>

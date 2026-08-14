@@ -57,11 +57,18 @@ export type Page<T> = {
   total_pages: number
 }
 
-export async function getSessions(pageNumber = 1) {
+export async function getSessions(
+  pageNumber = 1,
+  filters: { state?: string; remote_addr?: string } = {},
+) {
+  const params = new URLSearchParams({
+    page: String(pageNumber),
+    page_size: "50",
+  })
+  for (const [key, value] of Object.entries(filters))
+    if (value) params.set(key, value)
   return page(sessionSchema).parse(
-    await api.get<Page<EppSession>>(
-      `/epp/sessions?page=${pageNumber}&page_size=50`,
-    ),
+    await api.get<Page<EppSession>>(`/epp/sessions?${params}`),
   )
 }
 export async function getTransactions(

@@ -11,10 +11,13 @@ export const eppKeys = {
   sessions: (page: number) => ["epp", "sessions", page],
   transactions: (page: number) => ["epp", "transactions", page],
 }
-export function useEppSessions(page = 1) {
+export function useEppSessions(
+  page = 1,
+  filters: { state?: string; remote_addr?: string } = {},
+) {
   return useQuery({
-    queryKey: eppKeys.sessions(page),
-    queryFn: () => getSessions(page),
+    queryKey: [...eppKeys.sessions(page), filters],
+    queryFn: () => getSessions(page, filters),
   })
 }
 export function useEppTransactions(
