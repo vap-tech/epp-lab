@@ -20,8 +20,8 @@ pub(crate) enum ContactCommand {
     Check(ContactCheckCommand),
     Create(ContactCreateCommand),
     Info(ContactInfoCommand),
-    Update,
-    Delete,
+    Update(ContactUpdateCommand),
+    Delete(ContactDeleteCommand),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -31,6 +31,16 @@ pub(crate) struct ContactCheckCommand {
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct ContactInfoCommand {
+    pub id: String,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct ContactUpdateCommand {
+    pub id: String,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct ContactDeleteCommand {
     pub id: String,
 }
 
@@ -61,8 +71,8 @@ impl EppCommand {
             Self::Contact(ContactCommand::Check(_)) => "contact:check",
             Self::Contact(ContactCommand::Create(_)) => "contact:create",
             Self::Contact(ContactCommand::Info(_)) => "contact:info",
-            Self::Contact(ContactCommand::Update) => "contact:update",
-            Self::Contact(ContactCommand::Delete) => "contact:delete",
+            Self::Contact(ContactCommand::Update(_)) => "contact:update",
+            Self::Contact(ContactCommand::Delete(_)) => "contact:delete",
         }
     }
 }
@@ -176,9 +186,13 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                         ContactInfoCommand { id: String::new() },
                     )));
                 } else if name.ends_with(b"update") {
-                    command = Some(EppCommand::Contact(ContactCommand::Update));
+                    command = Some(EppCommand::Contact(ContactCommand::Update(
+                        ContactUpdateCommand { id: String::new() },
+                    )));
                 } else if name.ends_with(b"delete") {
-                    command = Some(EppCommand::Contact(ContactCommand::Delete));
+                    command = Some(EppCommand::Contact(ContactCommand::Delete(
+                        ContactDeleteCommand { id: String::new() },
+                    )));
                 }
                 path.push(name);
             }
@@ -317,10 +331,20 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                 cl_trid,
             })
         }
-        Some(EppCommand::Contact(contact)) => Ok(ParsedCommand {
-            command: EppCommand::Contact(contact),
-            cl_trid,
-        }),
+        Some(EppCommand::Contact(ContactCommand::Update(mut update))) => {
+            update.id = contact_ids.first().cloned().ok_or(ParseError::Command)?;
+            Ok(ParsedCommand {
+                command: EppCommand::Contact(ContactCommand::Update(update)),
+                cl_trid,
+            })
+        }
+        Some(EppCommand::Contact(ContactCommand::Delete(mut delete))) => {
+            delete.id = contact_ids.first().cloned().ok_or(ParseError::Command)?;
+            Ok(ParsedCommand {
+                command: EppCommand::Contact(ContactCommand::Delete(delete)),
+                cl_trid,
+            })
+        }
         None if xml.windows(9).any(|window| window == b"<command>") => Err(ParseError::Unsupported),
         None => Err(ParseError::Command),
     }
