@@ -226,6 +226,19 @@ pub(crate) async fn update_postal_info(
     tx.commit().await
 }
 
+pub(crate) async fn update_disclose_flag(
+    pool: &PgPool,
+    id: Uuid,
+    flag: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE contacts SET disclose_flag = $2, updated_at = NOW() WHERE id = $1")
+        .bind(id)
+        .bind(flag)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 #[allow(dead_code)]
 pub(crate) async fn create_identity(
     pool: &PgPool,

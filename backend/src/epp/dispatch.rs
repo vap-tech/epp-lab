@@ -511,6 +511,26 @@ pub(crate) async fn execute_contact_update(
         .await
         .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?;
     }
+    if let crate::domain::contact::Patch::Set(flag) = &command.chg_disclose {
+        let value = match flag.as_str() {
+            "0" => "private",
+            "1" => "public",
+            _ => {
+                return super::protocol::send_response(
+                    stream,
+                    limits,
+                    super::protocol::COMMAND_USE_ERROR,
+                    "invalid disclose flag",
+                    cl_trid,
+                    sv_trid,
+                )
+                .await;
+            }
+        };
+        crate::storage::contact::update_disclose_flag(db, identity.id, value)
+            .await
+            .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?;
+    }
     crate::storage::contact::update_email_auth(
         db,
         identity.id,
