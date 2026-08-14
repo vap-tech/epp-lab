@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 use thiserror::Error;
 
+use super::zone::{Zone, ZoneId, ZoneStatus};
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ExtensionKey(String);
 
@@ -34,6 +36,13 @@ pub trait ExtensionDefinition: Send + Sync {
     fn key(&self) -> ExtensionKey;
     fn display_name(&self) -> &'static str;
     fn namespace_uri(&self) -> &'static str;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ZoneExtensionAssignment {
+    pub zone_id: ZoneId,
+    pub extension_key: ExtensionKey,
+    pub enabled: bool,
 }
 
 pub struct ExtensionRegistry {
@@ -73,6 +82,28 @@ impl ExtensionRegistry {
 
     pub fn list(&self) -> impl Iterator<Item = &dyn ExtensionDefinition> {
         self.definitions.values().map(Box::as_ref)
+    }
+
+    pub fn advertised_namespaces<'a>(
+        &'a self,
+        zones: impl IntoIterator<Item = &'a Zone>,
+        assignments: impl IntoIterator<Item = &'a ZoneExtensionAssignment>,
+    ) -> Vec<&'static str> {
+        let active_zone_ids: Vec<_> = zones
+            .into_iter()
+            .filter(|zone| zone.status == ZoneStatus::Active)
+            .map(|zone| zone.id)
+            .collect();
+        let mut namespaces = assignments
+            .into_iter()
+            .filter(|assignment| assignment.enabled)
+            .filter(|assignment| active_zone_ids.contains(&assignment.zone_id))
+            .filter_map(|assignment| self.get(&assignment.extension_key))
+            .map(ExtensionDefinition::namespace_uri)
+            .collect::<Vec<_>>();
+        namespaces.sort_unstable();
+        namespaces.dedup();
+        namespaces
     }
 }
 
@@ -137,5 +168,39 @@ mod tests {
         assert!(ExtensionKey::parse("fee-0.6").is_ok());
         assert_eq!(ExtensionKey::parse("Fee"), Err(ExtensionKeyError::Invalid));
         assert_eq!(ExtensionKey::parse(""), Err(ExtensionKeyError::Empty));
+    }
+
+    #[test]
+    fn advertises_only_registered_enabled_extensions_for_active_zones() {
+        let registry = ExtensionRegistry::from_definitions(vec![
+            Box::new(TestExtension) as Box<dyn ExtensionDefinition>
+        ])
+        .unwrap();
+        let active_zone = Zone {
+            id: ZoneId::new(uuid::Uuid::new_v4()),
+            name: crate::domain::zone::ZoneName::parse("com").unwrap(),
+            status: ZoneStatus::Active,
+            contact_policy: Default::default(),
+        };
+        let disabled_zone = Zone {
+            status: ZoneStatus::Disabled,
+            ..active_zone.clone()
+        };
+        let assignment = ZoneExtensionAssignment {
+            zone_id: active_zone.id,
+            extension_key: ExtensionKey::parse("test-extension-1").unwrap(),
+            enabled: true,
+        };
+        assert_eq!(
+            registry
+                .advertised_namespaces([&active_zone], [&assignment])
+                .len(),
+            1
+        );
+        assert!(
+            registry
+                .advertised_namespaces([&disabled_zone], [&assignment])
+                .is_empty()
+        );
     }
 }

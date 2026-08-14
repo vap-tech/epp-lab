@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Added deterministic advertised-extension calculation from registered
+  extensions, enabled assignments and active zones.
 - Added an immutable compile-time ExtensionRegistry with validated keys,
   namespace lookup and test-only extension coverage.
 - Added the immutable Stage 3 database migration for zones, contact usage
