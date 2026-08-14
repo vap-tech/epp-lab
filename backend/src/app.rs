@@ -11,6 +11,7 @@ static MIGRATOR: Migrator = sqlx::migrate!("../backend/migrations");
 pub(crate) struct AppState {
     pub db: PgPool,
     pub settings: Settings,
+    pub extension_registry: Arc<crate::domain::extension::ExtensionRegistry>,
 }
 
 pub(crate) async fn build_state(settings: Settings) -> Result<Arc<AppState>> {
@@ -23,5 +24,9 @@ pub(crate) async fn build_state(settings: Settings) -> Result<Arc<AppState>> {
         .run(&db)
         .await
         .context("failed to run migrations")?;
-    Ok(Arc::new(AppState { db, settings }))
+    Ok(Arc::new(AppState {
+        db,
+        settings,
+        extension_registry: Arc::new(crate::domain::extension::ExtensionRegistry::empty()),
+    }))
 }

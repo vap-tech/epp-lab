@@ -17,6 +17,7 @@ use super::{
     auth::{login, logout, session},
     certificates::{create as create_certificate, list as list_certificates},
     epp::{session as epp_session, sessions, transaction, transactions},
+    extensions::{catalog, list_zone_extensions, set_zone_extension},
     health::health,
     info::info,
     registrars::{create, get as get_registrar, list},
@@ -48,6 +49,12 @@ pub(crate) fn router(state: Arc<AppState>) -> Router {
         .route(
             "/api/zones/{id}/contact-policy",
             axum::routing::patch(update_contact_policy),
+        )
+        .route("/api/extensions/catalog", get(catalog))
+        .route("/api/zones/{id}/extensions", get(list_zone_extensions))
+        .route(
+            "/api/zones/{id}/extensions/{extension_key}",
+            axum::routing::patch(set_zone_extension),
         )
         .route("/api/registrars/{id}", get(get_registrar))
         .route(

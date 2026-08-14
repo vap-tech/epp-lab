@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Added authenticated extension catalog and zone assignment endpoints; the
+  production catalog is currently empty and unknown extensions are rejected.
 - Added CSRF-protected contact policy updates at
   `PATCH /api/zones/:id/contact-policy` with explicit role enum validation.
 - Added authenticated Zone detail and status update endpoints; Zone rename and
