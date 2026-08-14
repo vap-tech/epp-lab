@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router"
+import { useState } from "react"
 import { XmlViewer } from "@/components/protocol/xml-viewer"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { useEppTransaction } from "@/hooks/useEpp"
 
 export const Route = createFileRoute("/_layout/transactions/$transactionId")({
@@ -10,6 +12,8 @@ export const Route = createFileRoute("/_layout/transactions/$transactionId")({
 function TransactionDetail() {
   const { transactionId } = Route.useParams()
   const query = useEppTransaction(transactionId)
+  const [raw, setRaw] = useState(false)
+  const [wrap, setWrap] = useState(false)
   if (query.isPending)
     return <p className="text-muted-foreground">Loading transaction…</p>
   if (query.isError || !query.data)
@@ -56,8 +60,36 @@ function TransactionDetail() {
           {item.duration_ms === null ? "—" : `${item.duration_ms} ms`}
         </Field>
       </div>
-      <XmlViewer title="Request XML" xml={item.request_xml} />
-      <XmlViewer title="Response XML" xml={item.response_xml} />
+      <section className="flex flex-col gap-4">
+        <div className="flex justify-end gap-1">
+          <Button
+            variant={raw ? "default" : "secondary"}
+            size="sm"
+            onClick={() => setRaw((value) => !value)}
+          >
+            Raw
+          </Button>
+          <Button
+            variant={wrap ? "default" : "secondary"}
+            size="sm"
+            onClick={() => setWrap((value) => !value)}
+          >
+            Wrap
+          </Button>
+        </div>
+        <XmlViewer
+          title="Request XML"
+          xml={item.request_xml}
+          raw={raw}
+          wrap={wrap}
+        />
+        <XmlViewer
+          title="Response XML"
+          xml={item.response_xml}
+          raw={raw}
+          wrap={wrap}
+        />
+      </section>
       {item.delivery_error ? (
         <Field label="Delivery error">{item.delivery_error}</Field>
       ) : null}

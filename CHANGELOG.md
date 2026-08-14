@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Simplified XML viewer controls with shared Raw and Wrap toggles for request
+  and response payloads while keeping Copy local to each payload.
 - Replaced Shiki with a minimal Prism XML tokenizer and custom EPP Lab token
   theme to keep production assets small and CSP-compatible.
 - Added a reusable EPP XML viewer with pretty/raw modes, wrapping, original

@@ -1,12 +1,17 @@
 import Prism from "prismjs"
 import "prismjs/components/prism-markup"
-import { useMemo, useState } from "react"
+import { useMemo } from "react"
 import { toast } from "sonner"
 import xmlFormat from "xml-formatter"
 
 import { Button } from "@/components/ui/button"
 
-type XmlViewerProps = { xml: string | null; title?: string }
+type XmlViewerProps = {
+  xml: string | null
+  title?: string
+  raw: boolean
+  wrap: boolean
+}
 function safeFormatXml(xml: string) {
   try {
     return xmlFormat(xml, { indentation: "  ", lineSeparator: "\n" })
@@ -15,9 +20,7 @@ function safeFormatXml(xml: string) {
   }
 }
 
-export function XmlViewer({ xml, title }: XmlViewerProps) {
-  const [raw, setRaw] = useState(false)
-  const [wrap, setWrap] = useState(false)
+export function XmlViewer({ xml, title, raw, wrap }: XmlViewerProps) {
   const originalXml = xml
   const displayXml = useMemo(
     () =>
@@ -40,40 +43,17 @@ export function XmlViewer({ xml, title }: XmlViewerProps) {
       <div className="flex items-center justify-between gap-2">
         <h2 className="font-semibold">{title}</h2>
         {originalXml !== null ? (
-          <div className="flex gap-1">
-            <Button
-              variant={raw ? "secondary" : "default"}
-              size="sm"
-              onClick={() => setRaw(false)}
-            >
-              Pretty
-            </Button>
-            <Button
-              variant={raw ? "default" : "secondary"}
-              size="sm"
-              onClick={() => setRaw(true)}
-            >
-              Raw
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setWrap((value) => !value)}
-            >
-              {wrap ? "Unwrap" : "Wrap"}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                navigator.clipboard
-                  .writeText(originalXml)
-                  .then(() => toast.success("Copied to clipboard"))
-              }
-            >
-              Copy
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              navigator.clipboard
+                .writeText(originalXml)
+                .then(() => toast.success("Copied to clipboard"))
+            }
+          >
+            Copy
+          </Button>
         ) : null}
       </div>
       {originalXml === null ? (
