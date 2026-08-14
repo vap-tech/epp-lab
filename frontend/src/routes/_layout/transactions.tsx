@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, Link } from "@tanstack/react-router"
 import { useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
@@ -66,7 +66,15 @@ function Transactions() {
                     {new Date(item.started_at).toLocaleString()}
                   </td>
                   <td className="px-4 py-3">{item.registrar?.handle ?? "—"}</td>
-                  <td className="px-4 py-3 font-mono">{item.command}</td>
+                  <td className="px-4 py-3 font-mono">
+                    <Link
+                      className="text-primary hover:underline"
+                      to="/transactions/$transactionId"
+                      params={{ transactionId: item.id }}
+                    >
+                      {item.command}
+                    </Link>
+                  </td>
                   <td className="px-4 py-3">{item.response_code ?? "—"}</td>
                   <td className="px-4 py-3">
                     <Badge

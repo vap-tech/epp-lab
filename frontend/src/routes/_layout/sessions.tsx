@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, Link } from "@tanstack/react-router"
 import { useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
@@ -81,7 +81,15 @@ function Sessions() {
                   <td className="px-4 py-3">
                     {new Date(item.connected_at).toLocaleString()}
                   </td>
-                  <td className="px-4 py-3">{item.transaction_count}</td>
+                  <td className="px-4 py-3">
+                    <Link
+                      className="text-primary hover:underline"
+                      to="/sessions/$sessionId"
+                      params={{ sessionId: item.id }}
+                    >
+                      {item.transaction_count}
+                    </Link>
+                  </td>
                   <td className="px-4 py-3">{item.disconnect_reason ?? "—"}</td>
                 </tr>
               ))}
