@@ -1,3 +1,4 @@
+pub(crate) mod auth;
 pub(crate) mod certificates;
 pub(crate) mod health;
 pub(crate) mod info;

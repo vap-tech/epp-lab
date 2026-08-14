@@ -1,10 +1,14 @@
 use std::sync::Arc;
 
-use axum::{Router, routing::get};
+use axum::{
+    Router,
+    routing::{get, post},
+};
 
 use crate::app::AppState;
 
 use super::{
+    auth::{login, logout, session},
     certificates::{create as create_certificate, list as list_certificates},
     health::health,
     info::info,
@@ -14,6 +18,9 @@ use super::{
 pub(crate) fn router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/api/health", get(health))
+        .route("/api/auth/login", post(login))
+        .route("/api/auth/session", get(session))
+        .route("/api/auth/logout", post(logout))
         .route("/api/info", get(info))
         .route("/api/registrars", get(list).post(create))
         .route("/api/registrars/{id}", get(get_registrar))
