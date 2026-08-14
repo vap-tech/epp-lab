@@ -25,6 +25,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers,
   })
   if (!response.ok) {
+    if (response.status === 401) {
+      window.dispatchEvent(new Event("epp-lab:auth-expired"))
+    }
     throw new ApiError("Request failed", response.status)
   }
   if (response.status === 204) return undefined as T

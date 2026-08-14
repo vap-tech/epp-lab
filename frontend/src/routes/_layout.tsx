@@ -18,10 +18,22 @@ function Layout() {
   const navigate = useNavigate()
   const { session } = useAuth()
   useEffect(() => {
-    if (!session.isLoading && !session.data?.authenticated) {
+    const handleExpiredSession = () => navigate({ to: "/login" })
+    window.addEventListener("epp-lab:auth-expired", handleExpiredSession)
+    if (
+      !session.isLoading &&
+      (!session.data?.authenticated || session.isError)
+    ) {
       navigate({ to: "/login" })
     }
-  }, [navigate, session.data?.authenticated, session.isLoading])
+    return () =>
+      window.removeEventListener("epp-lab:auth-expired", handleExpiredSession)
+  }, [
+    navigate,
+    session.data?.authenticated,
+    session.isError,
+    session.isLoading,
+  ])
   if (session.isLoading || !session.data?.authenticated) return null
 
   return (
