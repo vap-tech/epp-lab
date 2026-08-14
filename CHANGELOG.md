@@ -8,6 +8,10 @@
   authentication-failure handling for future encrypted Contact authInfo.
 - Added optional `CONTACT_AUTHINFO_KEY_HEX` configuration validation and
   injected the cipher into application state without persisting the key.
+- Added the immutable Contact persistence migration with normalized postal,
+  phone, status and disclosure tables; `authInfo` is stored only as ciphertext.
+- Added the initial Contact repository identity boundary for future application
+  commands.
 - Added the initial RFC 5733 Contact domain foundation with validated
   identities, postal data, phone/email values, statuses and disclosure types.
 - Added PostgreSQL-backed Admin API integration tests and a dedicated test
