@@ -4,6 +4,11 @@
 
 ### Changed
 
+- Added read-only EPP Sessions and Transactions operational views with
+  pagination, server-side filters, detail pages, XML inspection and
+  session/transaction navigation.
+- Added protected `/api/epp/sessions` and `/api/epp/transactions` list/detail
+  endpoints with explicit DTOs and safe list payloads without raw XML.
 - Added the React admin frontend with HTTPS-served SPA fallback, protected
   routes, server-side admin sessions, CSRF protection, Dashboard and Registrar
   views.
