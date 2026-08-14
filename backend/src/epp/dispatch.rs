@@ -14,6 +14,30 @@ pub(crate) struct LoginResult {
     pub authenticated: bool,
 }
 
+const CONTACT_OBJECT_URI: &str = "urn:ietf:params:xml:ns:contact-1.0";
+
+async fn reject_unnegotiated_contact_service(
+    stream: &mut TlsStream<TcpStream>,
+    limits: &super::framing::FrameLimits,
+    state: &crate::registry::session::SessionState,
+    cl_trid: Option<&str>,
+    sv_trid: &str,
+) -> Result<Option<super::protocol::Response>, super::framing::FrameError> {
+    if state.has_object_uri(CONTACT_OBJECT_URI) {
+        return Ok(None);
+    }
+    super::protocol::send_response(
+        stream,
+        limits,
+        super::protocol::COMMAND_USE_ERROR,
+        "contact service was not negotiated",
+        cl_trid,
+        sv_trid,
+    )
+    .await
+    .map(Some)
+}
+
 fn services_supported(
     requested_objects: &[String],
     requested_extensions: &[String],
@@ -103,6 +127,11 @@ pub(crate) async fn execute_contact_check(
         )
         .await;
     }
+    if let Some(response) =
+        reject_unnegotiated_contact_service(stream, limits, state, cl_trid, sv_trid).await?
+    {
+        return Ok(response);
+    }
     let mut results = Vec::with_capacity(command.ids.len());
     for id in &command.ids {
         let available = crate::application::check_contact(db, id)
@@ -131,12 +160,18 @@ pub(crate) async fn execute_contact_create(
     limits: &super::framing::FrameLimits,
     db: &PgPool,
     transaction_id: uuid::Uuid,
+    state: &crate::registry::session::SessionState,
     cipher: Option<&dyn crate::security::SecretCipher>,
     command: &super::parser::ContactCreateCommand,
     registrar_id: uuid::Uuid,
     cl_trid: Option<&str>,
     sv_trid: &str,
 ) -> Result<super::protocol::Response, super::framing::FrameError> {
+    if let Some(response) =
+        reject_unnegotiated_contact_service(stream, limits, state, cl_trid, sv_trid).await?
+    {
+        return Ok(response);
+    }
     let Some(cipher) = cipher else {
         return super::protocol::send_response(
             stream,
@@ -188,12 +223,18 @@ pub(crate) async fn execute_contact_info(
     limits: &super::framing::FrameLimits,
     db: &PgPool,
     transaction_id: uuid::Uuid,
+    state: &crate::registry::session::SessionState,
     cipher: Option<&dyn crate::security::SecretCipher>,
     command: &super::parser::ContactInfoCommand,
     registrar_id: uuid::Uuid,
     cl_trid: Option<&str>,
     sv_trid: &str,
 ) -> Result<super::protocol::Response, super::framing::FrameError> {
+    if let Some(response) =
+        reject_unnegotiated_contact_service(stream, limits, state, cl_trid, sv_trid).await?
+    {
+        return Ok(response);
+    }
     let Some(cipher) = cipher else {
         return super::protocol::send_response(
             stream,
@@ -266,11 +307,17 @@ pub(crate) async fn execute_contact_delete(
     limits: &super::framing::FrameLimits,
     db: &PgPool,
     transaction_id: uuid::Uuid,
+    state: &crate::registry::session::SessionState,
     command: &super::parser::ContactDeleteCommand,
     registrar_id: uuid::Uuid,
     cl_trid: Option<&str>,
     sv_trid: &str,
 ) -> Result<super::protocol::Response, super::framing::FrameError> {
+    if let Some(response) =
+        reject_unnegotiated_contact_service(stream, limits, state, cl_trid, sv_trid).await?
+    {
+        return Ok(response);
+    }
     let Some(identity) = crate::storage::contact::find_identity_by_roid(db, &command.id)
         .await
         .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?
@@ -358,12 +405,18 @@ pub(crate) async fn execute_contact_update(
     limits: &super::framing::FrameLimits,
     db: &PgPool,
     _transaction_id: uuid::Uuid,
+    state: &crate::registry::session::SessionState,
     cipher: Option<&dyn crate::security::SecretCipher>,
     command: &super::parser::ContactUpdateCommand,
     registrar_id: uuid::Uuid,
     cl_trid: Option<&str>,
     sv_trid: &str,
 ) -> Result<super::protocol::Response, super::framing::FrameError> {
+    if let Some(response) =
+        reject_unnegotiated_contact_service(stream, limits, state, cl_trid, sv_trid).await?
+    {
+        return Ok(response);
+    }
     let allowed = |status: &str| {
         matches!(
             status,

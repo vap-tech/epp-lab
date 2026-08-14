@@ -16,6 +16,8 @@
   disclosure preference.
 - Made the Contact object URI mandatory in advertised and negotiated service
   configuration, including the external smoke client.
+- Contact commands now reject a session that authenticated without negotiating
+  the Contact object URI.
 - Completed optional Contact update clearing for fax, organization,
   state/province and postal code; empty XML elements now become SQL `NULL`.
 - Added PostgreSQL coverage for both atomic Contact update rollback and

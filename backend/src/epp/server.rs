@@ -219,6 +219,7 @@ async fn handle_connection(
                         if login_result.authenticated {
                             session_state = crate::registry::session::SessionState::Authenticated {
                                 registrar_id: identity.registrar_id,
+                                object_uris: login.object_uris.clone(),
                             };
                         }
                         response = Some(login_result.response);
@@ -264,6 +265,7 @@ async fn handle_connection(
                                 &limits,
                                 &db,
                                 transaction_id,
+                                &session_state,
                                 contact_authinfo_cipher.as_deref(),
                                 &command,
                                 identity.registrar_id,
@@ -282,6 +284,7 @@ async fn handle_connection(
                                 &limits,
                                 &db,
                                 transaction_id,
+                                &session_state,
                                 contact_authinfo_cipher.as_deref(),
                                 &command,
                                 identity.registrar_id,
@@ -300,6 +303,7 @@ async fn handle_connection(
                                 &limits,
                                 &db,
                                 transaction_id,
+                                &session_state,
                                 &command,
                                 identity.registrar_id,
                                 cl_trid.as_deref(),
@@ -317,6 +321,7 @@ async fn handle_connection(
                                 &limits,
                                 &db,
                                 transaction_id,
+                                &session_state,
                                 contact_authinfo_cipher.as_deref(),
                                 &command,
                                 identity.registrar_id,
