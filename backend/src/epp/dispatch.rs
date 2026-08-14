@@ -79,6 +79,53 @@ pub(crate) async fn execute_hello(
 }
 
 #[allow(clippy::too_many_arguments)]
+pub(crate) async fn execute_contact_check(
+    stream: &mut TlsStream<TcpStream>,
+    limits: &super::framing::FrameLimits,
+    db: &PgPool,
+    transaction_id: uuid::Uuid,
+    state: &crate::registry::session::SessionState,
+    command: &super::parser::ContactCheckCommand,
+    cl_trid: Option<&str>,
+    sv_trid: &str,
+) -> Result<super::protocol::Response, super::framing::FrameError> {
+    if !matches!(
+        state,
+        crate::registry::session::SessionState::Authenticated { .. }
+    ) {
+        return super::protocol::send_response(
+            stream,
+            limits,
+            super::protocol::COMMAND_ERROR,
+            "not authenticated",
+            cl_trid,
+            sv_trid,
+        )
+        .await;
+    }
+    let mut results = Vec::with_capacity(command.ids.len());
+    for id in &command.ids {
+        let available = crate::application::check_contact(db, id)
+            .await
+            .map_err(|error| super::framing::FrameError::Write(std::io::Error::other(error)))?
+            .available;
+        results.push((id.clone(), available));
+    }
+    match super::protocol::send_contact_check(stream, limits, &results, cl_trid, sv_trid).await {
+        Ok(response) => Ok(response),
+        Err(error) => {
+            let _ = crate::storage::session::mark_delivery_failed(
+                db,
+                transaction_id,
+                &error.to_string(),
+            )
+            .await;
+            Err(error)
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn execute_logout(
     stream: &mut TlsStream<TcpStream>,
     limits: &super::framing::FrameLimits,

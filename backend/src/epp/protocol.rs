@@ -90,6 +90,40 @@ where
     Ok(greeting)
 }
 
+pub(crate) async fn send_contact_check<S>(
+    stream: &mut S,
+    limits: &FrameLimits,
+    results: &[(String, bool)],
+    cl_trid: Option<&str>,
+    sv_trid: &str,
+) -> Result<Response, FrameError>
+where
+    S: AsyncWrite + Unpin,
+{
+    let items = results
+        .iter()
+        .map(|(id, available)| {
+            format!(
+                "<contact:cd><contact:id avail=\"{}\">{}</contact:id></contact:cd>",
+                if *available { "1" } else { "0" },
+                escape_xml(id)
+            )
+        })
+        .collect::<String>();
+    let trid = cl_trid
+        .map(|value| format!("<clTRID>{}</clTRID>", escape_xml(value)))
+        .unwrap_or_default();
+    let response = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?><epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><response><result code="1000"><msg>Command completed successfully</msg></result><resData><contact:chkData xmlns:contact="urn:ietf:params:xml:ns:contact-1.0">{items}</contact:chkData></resData>{trid}<svTRID>{sv_trid}</svTRID></response></epp>"#
+    );
+    write_frame(stream, response.as_bytes(), limits).await?;
+    Ok(Response {
+        persisted_xml: response.clone(),
+        xml: response,
+        code: Some(SUCCESS),
+    })
+}
+
 #[allow(dead_code)]
 async fn _read_marker<S: AsyncRead + Unpin>(_stream: &mut S) {}
 
