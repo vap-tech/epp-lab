@@ -12,10 +12,12 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LayoutRouteImport } from './routes/_layout'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LayoutIndexRouteImport } from './routes/_layout/index'
+import { Route as LayoutContactsRouteImport } from './routes/_layout/contacts'
 import { Route as LayoutRegistrarsRouteImport } from './routes/_layout/registrars'
 import { Route as LayoutSessionsRouteImport } from './routes/_layout/sessions'
 import { Route as LayoutTransactionsRouteImport } from './routes/_layout/transactions'
 import { Route as LayoutZonesRouteImport } from './routes/_layout/zones'
+import { Route as LayoutContactsContactIdRouteImport } from './routes/_layout/contacts/$contactId'
 import { Route as LayoutSessionsSessionIdRouteImport } from './routes/_layout/sessions/$sessionId'
 import { Route as LayoutTransactionsTransactionIdRouteImport } from './routes/_layout/transactions/$transactionId'
 import { Route as LayoutZonesZoneIdRouteImport } from './routes/_layout/zones/$zoneId'
@@ -32,6 +34,11 @@ const LoginRoute = LoginRouteImport.update({
 const LayoutIndexRoute = LayoutIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutContactsRoute = LayoutContactsRouteImport.update({
+  id: '/contacts',
+  path: '/contacts',
   getParentRoute: () => LayoutRoute,
 } as any)
 const LayoutRegistrarsRoute = LayoutRegistrarsRouteImport.update({
@@ -54,6 +61,11 @@ const LayoutZonesRoute = LayoutZonesRouteImport.update({
   path: '/zones',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutContactsContactIdRoute = LayoutContactsContactIdRouteImport.update({
+  id: '/$contactId',
+  path: '/$contactId',
+  getParentRoute: () => LayoutContactsRoute,
+} as any)
 const LayoutSessionsSessionIdRoute = LayoutSessionsSessionIdRouteImport.update({
   id: '/$sessionId',
   path: '/$sessionId',
@@ -74,21 +86,25 @@ const LayoutZonesZoneIdRoute = LayoutZonesZoneIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof LayoutIndexRoute
   '/login': typeof LoginRoute
+  '/contacts': typeof LayoutContactsRouteWithChildren
   '/registrars': typeof LayoutRegistrarsRoute
   '/sessions': typeof LayoutSessionsRouteWithChildren
   '/transactions': typeof LayoutTransactionsRouteWithChildren
   '/zones': typeof LayoutZonesRouteWithChildren
+  '/contacts/$contactId': typeof LayoutContactsContactIdRoute
   '/sessions/$sessionId': typeof LayoutSessionsSessionIdRoute
   '/transactions/$transactionId': typeof LayoutTransactionsTransactionIdRoute
   '/zones/$zoneId': typeof LayoutZonesZoneIdRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
+  '/contacts': typeof LayoutContactsRouteWithChildren
   '/registrars': typeof LayoutRegistrarsRoute
   '/sessions': typeof LayoutSessionsRouteWithChildren
   '/transactions': typeof LayoutTransactionsRouteWithChildren
   '/zones': typeof LayoutZonesRouteWithChildren
   '/': typeof LayoutIndexRoute
+  '/contacts/$contactId': typeof LayoutContactsContactIdRoute
   '/sessions/$sessionId': typeof LayoutSessionsSessionIdRoute
   '/transactions/$transactionId': typeof LayoutTransactionsTransactionIdRoute
   '/zones/$zoneId': typeof LayoutZonesZoneIdRoute
@@ -97,11 +113,13 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_layout': typeof LayoutRouteWithChildren
   '/login': typeof LoginRoute
+  '/_layout/contacts': typeof LayoutContactsRouteWithChildren
   '/_layout/registrars': typeof LayoutRegistrarsRoute
   '/_layout/sessions': typeof LayoutSessionsRouteWithChildren
   '/_layout/transactions': typeof LayoutTransactionsRouteWithChildren
   '/_layout/zones': typeof LayoutZonesRouteWithChildren
   '/_layout/': typeof LayoutIndexRoute
+  '/_layout/contacts/$contactId': typeof LayoutContactsContactIdRoute
   '/_layout/sessions/$sessionId': typeof LayoutSessionsSessionIdRoute
   '/_layout/transactions/$transactionId': typeof LayoutTransactionsTransactionIdRoute
   '/_layout/zones/$zoneId': typeof LayoutZonesZoneIdRoute
@@ -111,21 +129,25 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/contacts'
     | '/registrars'
     | '/sessions'
     | '/transactions'
     | '/zones'
+    | '/contacts/$contactId'
     | '/sessions/$sessionId'
     | '/transactions/$transactionId'
     | '/zones/$zoneId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
+    | '/contacts'
     | '/registrars'
     | '/sessions'
     | '/transactions'
     | '/zones'
     | '/'
+    | '/contacts/$contactId'
     | '/sessions/$sessionId'
     | '/transactions/$transactionId'
     | '/zones/$zoneId'
@@ -133,11 +155,13 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_layout'
     | '/login'
+    | '/_layout/contacts'
     | '/_layout/registrars'
     | '/_layout/sessions'
     | '/_layout/transactions'
     | '/_layout/zones'
     | '/_layout/'
+    | '/_layout/contacts/$contactId'
     | '/_layout/sessions/$sessionId'
     | '/_layout/transactions/$transactionId'
     | '/_layout/zones/$zoneId'
@@ -171,6 +195,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutIndexRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/contacts': {
+      id: '/_layout/contacts'
+      path: '/contacts'
+      fullPath: '/contacts'
+      preLoaderRoute: typeof LayoutContactsRouteImport
+      parentRoute: typeof LayoutRoute
+    }
     '/_layout/registrars': {
       id: '/_layout/registrars'
       path: '/registrars'
@@ -199,6 +230,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutZonesRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/contacts/$contactId': {
+      id: '/_layout/contacts/$contactId'
+      path: '/$contactId'
+      fullPath: '/contacts/$contactId'
+      preLoaderRoute: typeof LayoutContactsContactIdRouteImport
+      parentRoute: typeof LayoutContactsRoute
+    }
     '/_layout/sessions/$sessionId': {
       id: '/_layout/sessions/$sessionId'
       path: '/$sessionId'
@@ -222,6 +260,18 @@ declare module '@tanstack/react-router' {
     }
   }
 }
+
+interface LayoutContactsRouteChildren {
+  LayoutContactsContactIdRoute: typeof LayoutContactsContactIdRoute
+}
+
+const LayoutContactsRouteChildren: LayoutContactsRouteChildren = {
+  LayoutContactsContactIdRoute: LayoutContactsContactIdRoute,
+}
+
+const LayoutContactsRouteWithChildren = LayoutContactsRoute._addFileChildren(
+  LayoutContactsRouteChildren,
+)
 
 interface LayoutSessionsRouteChildren {
   LayoutSessionsSessionIdRoute: typeof LayoutSessionsSessionIdRoute
@@ -259,6 +309,7 @@ const LayoutZonesRouteWithChildren = LayoutZonesRoute._addFileChildren(
 )
 
 interface LayoutRouteChildren {
+  LayoutContactsRoute: typeof LayoutContactsRouteWithChildren
   LayoutRegistrarsRoute: typeof LayoutRegistrarsRoute
   LayoutSessionsRoute: typeof LayoutSessionsRouteWithChildren
   LayoutTransactionsRoute: typeof LayoutTransactionsRouteWithChildren
@@ -267,6 +318,7 @@ interface LayoutRouteChildren {
 }
 
 const LayoutRouteChildren: LayoutRouteChildren = {
+  LayoutContactsRoute: LayoutContactsRouteWithChildren,
   LayoutRegistrarsRoute: LayoutRegistrarsRoute,
   LayoutSessionsRoute: LayoutSessionsRouteWithChildren,
   LayoutTransactionsRoute: LayoutTransactionsRouteWithChildren,

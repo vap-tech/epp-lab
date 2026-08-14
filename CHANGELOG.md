@@ -130,6 +130,11 @@
 
 ### Added
 
+- Added read-only Contacts list and detail views to the admin UI.
+- Kept contact authentication information out of admin responses and the UI.
+
+### Added
+
 - Added `client/run_integration.sh` for running the EPP smoke test against a
   configured server.
 - Added EOF coverage for incomplete EPP frame headers and bodies.
