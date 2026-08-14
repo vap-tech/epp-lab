@@ -37,6 +37,10 @@ pub(crate) struct ContactInfoCommand {
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct ContactUpdateCommand {
     pub id: String,
+    pub add_statuses: Vec<String>,
+    pub rem_statuses: Vec<String>,
+    pub chg_email: crate::domain::contact::Patch<String>,
+    pub chg_auth_info: crate::domain::contact::Patch<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -187,7 +191,13 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                     )));
                 } else if name.ends_with(b"update") {
                     command = Some(EppCommand::Contact(ContactCommand::Update(
-                        ContactUpdateCommand { id: String::new() },
+                        ContactUpdateCommand {
+                            id: String::new(),
+                            add_statuses: Vec::new(),
+                            rem_statuses: Vec::new(),
+                            chg_email: Default::default(),
+                            chg_auth_info: Default::default(),
+                        },
                     )));
                 } else if name.ends_with(b"delete") {
                     command = Some(EppCommand::Contact(ContactCommand::Delete(

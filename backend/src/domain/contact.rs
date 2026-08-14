@@ -3,6 +3,20 @@ use std::collections::BTreeSet;
 use thiserror::Error;
 use uuid::Uuid;
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum Patch<T> {
+    #[default]
+    Unchanged,
+    Set(T),
+    Clear,
+}
+
+impl<T> Patch<T> {
+    pub fn is_unchanged(&self) -> bool {
+        matches!(self, Self::Unchanged)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ContactId(Uuid);
 impl ContactId {
@@ -260,5 +274,12 @@ mod tests {
             .validate()
             .is_err()
         );
+    }
+
+    #[test]
+    fn patch_distinguishes_unchanged_set_and_clear() {
+        assert!(Patch::<String>::Unchanged.is_unchanged());
+        assert!(!Patch::Set("value".to_owned()).is_unchanged());
+        assert!(!Patch::<String>::Clear.is_unchanged());
     }
 }
