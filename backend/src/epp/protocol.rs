@@ -91,10 +91,41 @@ async fn _read_marker<S: AsyncRead + Unpin>(_stream: &mut S) {}
 
 #[cfg(test)]
 mod tests {
-    use super::escape_xml;
+    use std::time::Duration;
+
+    use super::{escape_xml, send_greeting};
+    use crate::epp::framing::{FrameLimits, read_frame};
+    use tokio::io::duplex;
+
+    fn limits() -> FrameLimits {
+        FrameLimits {
+            max_frame_size: 4096,
+            read_timeout: Duration::from_millis(100),
+            write_timeout: Duration::from_millis(100),
+        }
+    }
 
     #[test]
     fn escapes_xml_text() {
         assert_eq!(escape_xml("a<&>\"'"), "a&lt;&amp;&gt;&quot;&apos;");
+    }
+
+    #[tokio::test]
+    async fn greeting_serializes_advertised_extensions_into_epp_frame() {
+        let (mut client, mut server) = duplex(4096);
+        let extension = "urn:epp:params:xml:ns:test-1.0";
+
+        let greeting = send_greeting(
+            &mut client,
+            &limits(),
+            &["urn:ietf:params:xml:ns:domain-1.0".to_owned()],
+            &[extension.to_owned()],
+        )
+        .await
+        .unwrap();
+        let frame = String::from_utf8(read_frame(&mut server, &limits()).await.unwrap()).unwrap();
+
+        assert!(greeting.contains(&format!("<extURI>{extension}</extURI>")));
+        assert!(frame.contains(&format!("<extURI>{extension}</extURI>")));
     }
 }
