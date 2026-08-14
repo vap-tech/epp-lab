@@ -41,6 +41,9 @@ pub(crate) struct ContactUpdateCommand {
     pub rem_statuses: Vec<String>,
     pub chg_email: crate::domain::contact::Patch<String>,
     pub chg_auth_info: crate::domain::contact::Patch<String>,
+    pub chg_voice: crate::domain::contact::Patch<String>,
+    pub chg_fax: crate::domain::contact::Patch<String>,
+    pub chg_organization: crate::domain::contact::Patch<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -212,6 +215,9 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                             rem_statuses: Vec::new(),
                             chg_email: Default::default(),
                             chg_auth_info: Default::default(),
+                            chg_voice: Default::default(),
+                            chg_fax: Default::default(),
+                            chg_organization: Default::default(),
                         },
                     )));
                 } else if name.ends_with(b"delete") {
@@ -381,10 +387,25 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                 .remove("pw")
                 .map(crate::domain::contact::Patch::Set)
                 .unwrap_or_default();
+            update.chg_voice = contact_create_values
+                .remove("voice")
+                .map(crate::domain::contact::Patch::Set)
+                .unwrap_or_default();
+            update.chg_fax = contact_create_values
+                .remove("fax")
+                .map(crate::domain::contact::Patch::Set)
+                .unwrap_or_default();
+            update.chg_organization = contact_create_values
+                .remove("org")
+                .map(crate::domain::contact::Patch::Set)
+                .unwrap_or_default();
             if update.add_statuses.is_empty()
                 && update.rem_statuses.is_empty()
                 && update.chg_email.is_unchanged()
                 && update.chg_auth_info.is_unchanged()
+                && update.chg_voice.is_unchanged()
+                && update.chg_fax.is_unchanged()
+                && update.chg_organization.is_unchanged()
             {
                 return Err(ParseError::Command);
             }
@@ -532,6 +553,9 @@ mod tests {
                 rem_statuses: vec![],
                 chg_email: crate::domain::contact::Patch::Set("new@example.test".into()),
                 chg_auth_info: crate::domain::contact::Patch::Unchanged,
+                chg_voice: crate::domain::contact::Patch::Unchanged,
+                chg_fax: crate::domain::contact::Patch::Unchanged,
+                chg_organization: crate::domain::contact::Patch::Unchanged,
             }))
         );
     }
@@ -550,6 +574,9 @@ mod tests {
                 rem_statuses: vec![],
                 chg_email: crate::domain::contact::Patch::Unchanged,
                 chg_auth_info: crate::domain::contact::Patch::Set("new-secret".into()),
+                chg_voice: crate::domain::contact::Patch::Unchanged,
+                chg_fax: crate::domain::contact::Patch::Unchanged,
+                chg_organization: crate::domain::contact::Patch::Unchanged,
             }))
         );
         let redacted = redact_password(
