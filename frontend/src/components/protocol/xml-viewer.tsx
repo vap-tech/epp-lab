@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import xmlFormat from "xml-formatter"
 
 import { Button } from "@/components/ui/button"
+import { Switch } from "@/components/ui/switch"
 import {
   Tooltip,
   TooltipContent,
@@ -135,23 +136,14 @@ function SwitchControl({
   onChange?: (value: boolean) => void
 }) {
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      className="flex items-center gap-1.5"
-      onClick={() => onChange?.(!checked)}
-    >
+    <div className="flex items-center gap-1.5">
       {label}
-      <span
-        aria-hidden="true"
-        className={`relative h-4 w-7 rounded-full transition-colors ${checked ? "bg-primary" : "bg-muted-foreground/50"}`}
-      >
-        <span
-          className={`absolute top-0.5 size-3 rounded-full bg-white shadow-sm transition-transform ${checked ? "translate-x-3.5" : "translate-x-0.5"}`}
-        />
-      </span>
-    </button>
+      <Switch
+        size="sm"
+        checked={checked}
+        onCheckedChange={onChange}
+        aria-label={label}
+      />
+    </div>
   )
 }
