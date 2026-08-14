@@ -72,6 +72,7 @@ pub(crate) async fn execute_hello(
             }
         };
     Ok(super::protocol::Response {
+        persisted_xml: greeting.clone(),
         xml: greeting,
         code: None,
     })

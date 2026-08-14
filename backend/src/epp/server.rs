@@ -255,7 +255,7 @@ async fn handle_connection(
                 let _ = crate::storage::session::finish_transaction(
                     &db,
                     transaction_id,
-                    Some(&response.xml),
+                    Some(&response.persisted_xml),
                     response.code.map(i32::from),
                     started.elapsed().as_millis() as i64,
                 )

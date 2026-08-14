@@ -12,6 +12,9 @@ pub(crate) const COMMAND_USE_ERROR: u16 = 2102;
 pub(crate) struct Response {
     #[allow(dead_code)]
     pub xml: String,
+    /// XML safe to persist in transaction history. It may differ from `xml`
+    /// when a response contains a recoverable secret.
+    pub persisted_xml: String,
     #[allow(dead_code)]
     pub code: Option<u16>,
 }
@@ -35,6 +38,7 @@ where
     );
     write_frame(stream, response.as_bytes(), limits).await?;
     Ok(Response {
+        persisted_xml: response.clone(),
         xml: response,
         code: Some(code),
     })
