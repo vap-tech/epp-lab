@@ -1,4 +1,9 @@
-import { createFileRoute, Link, Outlet } from "@tanstack/react-router"
+import {
+  createFileRoute,
+  Link,
+  Outlet,
+  useRouterState,
+} from "@tanstack/react-router"
 import { useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
@@ -12,7 +17,11 @@ export const Route = createFileRoute("/_layout/sessions")({
 
 function Sessions() {
   const [page, setPage] = useState(1)
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  })
   const query = useEppSessions(page)
+  if (pathname !== "/sessions") return <Outlet />
   return (
     <section className="flex flex-col gap-6">
       <div className="flex items-start justify-between">
