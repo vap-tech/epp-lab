@@ -343,6 +343,17 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
         }
         Some(EppCommand::Contact(ContactCommand::Update(mut update))) => {
             update.id = contact_ids.first().cloned().ok_or(ParseError::Command)?;
+            update.chg_email = contact_create_values
+                .remove("email")
+                .map(crate::domain::contact::Patch::Set)
+                .unwrap_or_default();
+            update.chg_auth_info = contact_create_values
+                .remove("pw")
+                .map(crate::domain::contact::Patch::Set)
+                .unwrap_or_default();
+            if update.chg_email.is_unchanged() && update.chg_auth_info.is_unchanged() {
+                return Err(ParseError::Command);
+            }
             Ok(ParsedCommand {
                 command: EppCommand::Contact(ContactCommand::Update(update)),
                 cl_trid,
@@ -469,6 +480,24 @@ mod tests {
             parsed.command,
             EppCommand::Contact(ContactCommand::Check(ContactCheckCommand {
                 ids: vec!["C123".into(), "C456".into()]
+            }))
+        );
+    }
+
+    #[test]
+    fn parses_contact_update_email_patch() {
+        let parsed = parse_command(
+            br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><update xmlns:contact="urn:ietf:params:xml:ns:contact-1.0"><contact:update><contact:id>C123</contact:id><contact:chg><contact:email>new@example.test</contact:email></contact:chg></contact:update></update></command></epp>"#,
+        )
+        .unwrap();
+        assert_eq!(
+            parsed.command,
+            EppCommand::Contact(ContactCommand::Update(ContactUpdateCommand {
+                id: "C123".into(),
+                add_statuses: vec![],
+                rem_statuses: vec![],
+                chg_email: crate::domain::contact::Patch::Set("new@example.test".into()),
+                chg_auth_info: crate::domain::contact::Patch::Unchanged,
             }))
         );
     }
