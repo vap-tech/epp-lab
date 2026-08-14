@@ -38,8 +38,8 @@ pub(crate) fn prepare_contact_create(
     now: DateTime<Utc>,
 ) -> Result<crate::domain::contact::Contact, ContactCreateError> {
     use crate::domain::contact::{
-        Contact, ContactId, ContactRoid, ContactStatus, CountryCode, DisclosureFlag,
-        DisclosurePreference, EmailAddress, PhoneNumber, PostalAddress, PostalInfo, PostalInfoSet,
+        Contact, ContactId, ContactRoid, CountryCode, DisclosureFlag, DisclosurePreference,
+        EmailAddress, PhoneNumber, PostalAddress, PostalInfo, PostalInfoSet,
     };
     let auth_info = cipher
         .encrypt(command.auth_info.as_bytes())
@@ -80,9 +80,9 @@ pub(crate) fn prepare_contact_create(
             fields: Default::default(),
         },
         client_statuses: Default::default(),
-        // contact:create is committed synchronously in this stage.  A pending
-        // status would claim an asynchronous lifecycle that does not exist.
-        server_statuses: [ContactStatus::Ok].into_iter().collect(),
+        // `ok` is derived when no stored status applies. A pending status
+        // would claim an asynchronous lifecycle that does not exist.
+        server_statuses: Default::default(),
         sponsoring_registrar_id: registrar_id,
         created_by: registrar_id,
         created_at: now,
@@ -94,6 +94,18 @@ pub(crate) fn prepare_contact_create(
         .validate()
         .map_err(|error| ContactCreateError::InvalidData(error.to_string()))?;
     Ok(contact)
+}
+
+pub(crate) fn effective_contact_statuses(persisted: &[String], linked: bool) -> Vec<String> {
+    let parsed = persisted
+        .iter()
+        .filter_map(|status| crate::domain::contact::ContactStatus::parse(status))
+        .collect::<Vec<_>>();
+    crate::domain::contact::effective_statuses(parsed, linked)
+        .into_iter()
+        .map(crate::domain::contact::ContactStatus::as_str)
+        .map(str::to_owned)
+        .collect()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -254,11 +266,7 @@ mod tests {
             crate::security::SecretCipher::decrypt(&cipher, &contact.auth_info).unwrap(),
             command.auth_info.as_bytes()
         );
-        assert!(
-            contact
-                .server_statuses
-                .contains(&crate::domain::contact::ContactStatus::Ok)
-        );
+        assert!(contact.server_statuses.is_empty());
         assert!(
             !contact
                 .server_statuses

@@ -137,6 +137,54 @@ pub enum ContactStatus {
     PendingTransfer,
     PendingUpdate,
 }
+
+impl ContactStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ClientDeleteProhibited => "clientDeleteProhibited",
+            Self::ClientTransferProhibited => "clientTransferProhibited",
+            Self::ClientUpdateProhibited => "clientUpdateProhibited",
+            Self::Linked => "linked",
+            Self::Ok => "ok",
+            Self::PendingCreate => "pendingCreate",
+            Self::PendingDelete => "pendingDelete",
+            Self::PendingTransfer => "pendingTransfer",
+            Self::PendingUpdate => "pendingUpdate",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "clientDeleteProhibited" => Some(Self::ClientDeleteProhibited),
+            "clientTransferProhibited" => Some(Self::ClientTransferProhibited),
+            "clientUpdateProhibited" => Some(Self::ClientUpdateProhibited),
+            "linked" => Some(Self::Linked),
+            "ok" => Some(Self::Ok),
+            "pendingCreate" => Some(Self::PendingCreate),
+            "pendingDelete" => Some(Self::PendingDelete),
+            "pendingTransfer" => Some(Self::PendingTransfer),
+            "pendingUpdate" => Some(Self::PendingUpdate),
+            _ => None,
+        }
+    }
+}
+
+pub fn effective_statuses(
+    persisted: impl IntoIterator<Item = ContactStatus>,
+    linked: bool,
+) -> BTreeSet<ContactStatus> {
+    let mut statuses = persisted
+        .into_iter()
+        .filter(|status| !matches!(status, ContactStatus::Ok | ContactStatus::Linked))
+        .collect::<BTreeSet<_>>();
+    if linked {
+        statuses.insert(ContactStatus::Linked);
+    }
+    if statuses.is_empty() {
+        statuses.insert(ContactStatus::Ok);
+    }
+    statuses
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DisclosureFlag {
     Public,
@@ -281,5 +329,19 @@ mod tests {
         assert!(Patch::<String>::Unchanged.is_unchanged());
         assert!(!Patch::Set("value".to_owned()).is_unchanged());
         assert!(!Patch::<String>::Clear.is_unchanged());
+    }
+
+    #[test]
+    fn derives_ok_and_linked_statuses() {
+        assert_eq!(
+            effective_statuses([], false),
+            [ContactStatus::Ok].into_iter().collect()
+        );
+        assert_eq!(
+            effective_statuses([ContactStatus::ClientUpdateProhibited], true),
+            [ContactStatus::ClientUpdateProhibited, ContactStatus::Linked]
+                .into_iter()
+                .collect()
+        );
     }
 }

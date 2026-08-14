@@ -141,6 +141,7 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
     let mut contact_add_statuses = Vec::new();
     let mut contact_rem_statuses = Vec::new();
     let mut contact_disclose_fields = Vec::new();
+    let mut contact_clear_fields = Vec::new();
     let mut root_seen = false;
     loop {
         match reader.read_event_into(&mut buf) {
@@ -244,6 +245,22 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
             }
             Ok(Event::Empty(event)) => {
                 let name = event.name().as_ref().to_vec();
+                if path.iter().any(|part| part.ends_with(b"chg")) {
+                    let field = if name.ends_with(b"org") {
+                        Some("org")
+                    } else if name.ends_with(b"fax") {
+                        Some("fax")
+                    } else if name.ends_with(b"sp") {
+                        Some("sp")
+                    } else if name.ends_with(b"pc") {
+                        Some("pc")
+                    } else {
+                        None
+                    };
+                    if let Some(field) = field {
+                        contact_clear_fields.push(field);
+                    }
+                }
                 if path.iter().any(|part| part.ends_with(b"disclose")) {
                     let field = match name.as_slice() {
                         b"name" => Some("name"),
@@ -335,7 +352,27 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                     _ => {}
                 }
             }
-            Ok(Event::End(_)) => {
+            Ok(Event::End(event)) => {
+                let name = event.name().as_ref().to_vec();
+                if path.iter().any(|part| part.ends_with(b"chg")) {
+                    let field = if name.ends_with(b"org") {
+                        Some("org")
+                    } else if name.ends_with(b"fax") {
+                        Some("fax")
+                    } else if name.ends_with(b"sp") {
+                        Some("sp")
+                    } else if name.ends_with(b"pc") {
+                        Some("pc")
+                    } else {
+                        None
+                    };
+                    if let Some(field) = field
+                        && !contact_create_values.contains_key(field)
+                        && !contact_clear_fields.contains(&field)
+                    {
+                        contact_clear_fields.push(field);
+                    }
+                }
                 path.pop();
             }
             Ok(Event::Eof) => break,
@@ -417,42 +454,20 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
             update.id = contact_ids.first().cloned().ok_or(ParseError::Command)?;
             update.add_statuses = contact_add_statuses;
             update.rem_statuses = contact_rem_statuses;
-            update.chg_email = contact_create_values
-                .remove("email")
-                .map(crate::domain::contact::Patch::Set)
-                .unwrap_or_default();
-            update.chg_auth_info = contact_create_values
-                .remove("pw")
-                .map(crate::domain::contact::Patch::Set)
-                .unwrap_or_default();
-            update.chg_voice = contact_create_values
-                .remove("voice")
-                .map(crate::domain::contact::Patch::Set)
-                .unwrap_or_default();
-            update.chg_fax = contact_create_values
-                .remove("fax")
-                .map(crate::domain::contact::Patch::Set)
-                .unwrap_or_default();
-            update.chg_organization = contact_create_values
-                .remove("org")
-                .map(crate::domain::contact::Patch::Set)
-                .unwrap_or_default();
-            update.chg_city = contact_create_values
-                .remove("city")
-                .map(crate::domain::contact::Patch::Set)
-                .unwrap_or_default();
-            update.chg_state_province = contact_create_values
-                .remove("sp")
-                .map(crate::domain::contact::Patch::Set)
-                .unwrap_or_default();
-            update.chg_postal_code = contact_create_values
-                .remove("pc")
-                .map(crate::domain::contact::Patch::Set)
-                .unwrap_or_default();
-            update.chg_country_code = contact_create_values
-                .remove("cc")
-                .map(crate::domain::contact::Patch::Set)
-                .unwrap_or_default();
+            let mut patch = |key: &str| match contact_create_values.remove(key) {
+                Some(value) => crate::domain::contact::Patch::Set(value),
+                None if contact_clear_fields.contains(&key) => crate::domain::contact::Patch::Clear,
+                None => crate::domain::contact::Patch::Unchanged,
+            };
+            update.chg_email = patch("email");
+            update.chg_auth_info = patch("pw");
+            update.chg_voice = patch("voice");
+            update.chg_fax = patch("fax");
+            update.chg_organization = patch("org");
+            update.chg_city = patch("city");
+            update.chg_state_province = patch("sp");
+            update.chg_postal_code = patch("pc");
+            update.chg_country_code = patch("cc");
             update.chg_streets = contact_streets;
             update.chg_disclose = contact_create_values
                 .remove("disclose")
@@ -665,6 +680,27 @@ mod tests {
         )
         .unwrap();
         assert!(!redacted.contains("new-secret"));
+    }
+
+    #[test]
+    fn parses_contact_update_clear_patches() {
+        let parsed = parse_command(
+            br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><update xmlns:contact="urn:ietf:params:xml:ns:contact-1.0"><contact:update><contact:id>C123</contact:id><contact:chg><contact:postalInfo type="int"><contact:org></contact:org><contact:addr><contact:sp/><contact:pc/></contact:addr></contact:postalInfo><contact:fax/></contact:chg></contact:update></update></command></epp>"#,
+        )
+        .unwrap();
+        let EppCommand::Contact(ContactCommand::Update(update)) = parsed.command else {
+            panic!("expected contact:update");
+        };
+        assert_eq!(
+            update.chg_organization,
+            crate::domain::contact::Patch::Clear
+        );
+        assert_eq!(
+            update.chg_state_province,
+            crate::domain::contact::Patch::Clear
+        );
+        assert_eq!(update.chg_postal_code, crate::domain::contact::Patch::Clear);
+        assert_eq!(update.chg_fax, crate::domain::contact::Patch::Clear);
     }
 
     #[test]

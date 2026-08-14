@@ -154,6 +154,7 @@ pub(crate) async fn send_contact_info<S>(
     stream: &mut S,
     limits: &FrameLimits,
     contact: &crate::storage::contact::ContactDetailRow,
+    statuses: &[String],
     auth_info: &str,
     cl_trid: Option<&str>,
     sv_trid: &str,
@@ -166,10 +167,15 @@ where
         .iter()
         .map(|s| format!("<contact:street>{}</contact:street>", escape_xml(s)))
         .collect::<String>();
+    let statuses = statuses
+        .iter()
+        .map(|status| format!(r#"<contact:status s="{}"/>"#, escape_xml(status)))
+        .collect::<String>();
     let wire = format!(
-        r#"<?xml version="1.0" encoding="UTF-8"?><epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><response><result code="1000"><msg>Command completed successfully</msg></result><resData><contact:infData xmlns:contact="urn:ietf:params:xml:ns:contact-1.0"><contact:id>{}</contact:id><contact:roid>{}</contact:roid><contact:status s="ok"/><contact:postalInfo type="int"><contact:name>{}</contact:name>{}<contact:addr>{}<contact:city>{}</contact:city><contact:cc>{}</contact:cc></contact:addr></contact:postalInfo><contact:voice>{}</contact:voice><contact:email>{}</contact:email><contact:authInfo><contact:pw>{}</contact:pw></contact:authInfo><contact:crDate>{}</contact:crDate><contact:upDate>{}</contact:upDate></contact:infData></resData>{}<svTRID>{}</svTRID></response></epp>"#,
+        r#"<?xml version="1.0" encoding="UTF-8"?><epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><response><result code="1000"><msg>Command completed successfully</msg></result><resData><contact:infData xmlns:contact="urn:ietf:params:xml:ns:contact-1.0"><contact:id>{}</contact:id><contact:roid>{}</contact:roid>{}<contact:postalInfo type="int"><contact:name>{}</contact:name>{}<contact:addr>{}<contact:city>{}</contact:city><contact:cc>{}</contact:cc></contact:addr></contact:postalInfo><contact:voice>{}</contact:voice><contact:email>{}</contact:email><contact:authInfo><contact:pw>{}</contact:pw></contact:authInfo><contact:crDate>{}</contact:crDate><contact:upDate>{}</contact:upDate></contact:infData></resData>{}<svTRID>{}</svTRID></response></epp>"#,
         escape_xml(&contact.roid),
         escape_xml(&contact.roid),
+        statuses,
         escape_xml(&contact.name),
         contact
             .organization
@@ -295,6 +301,7 @@ mod tests {
             &mut client,
             &limits(),
             &contact,
+            &["ok".to_owned()],
             "secret-auth",
             Some("T1"),
             "S1",

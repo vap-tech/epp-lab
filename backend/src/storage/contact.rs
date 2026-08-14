@@ -144,16 +144,30 @@ pub(crate) async fn delete(pool: &PgPool, id: Uuid) -> Result<bool, sqlx::Error>
     Ok(result.rows_affected() == 1)
 }
 
+pub(crate) async fn has_client_status(
+    pool: &PgPool,
+    id: Uuid,
+    status: &str,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM contact_statuses WHERE contact_id = $1 AND status = $2 AND source = 'client')",
+    )
+    .bind(id)
+    .bind(status)
+    .fetch_one(pool)
+    .await
+}
+
 pub(crate) struct ContactUpdate<'a> {
     pub id: Uuid,
     pub auth_info_ciphertext: Option<&'a str>,
     pub email: Option<&'a str>,
     pub voice: Option<&'a str>,
-    pub fax: Option<&'a str>,
-    pub organization: Option<&'a str>,
+    pub fax: Option<Option<&'a str>>,
+    pub organization: Option<Option<&'a str>>,
     pub city: Option<&'a str>,
-    pub state_province: Option<&'a str>,
-    pub postal_code: Option<&'a str>,
+    pub state_province: Option<Option<&'a str>>,
+    pub postal_code: Option<Option<&'a str>>,
     pub country_code: Option<&'a str>,
     pub streets: &'a [&'a str],
     pub add_statuses: &'a [&'a str],
@@ -177,11 +191,12 @@ pub(crate) async fn apply_update(
         return Ok(false);
     }
     if update.email.is_some() || update.voice.is_some() || update.fax.is_some() {
-        sqlx::query("UPDATE contact_phones SET email=COALESCE($2,email), voice=COALESCE($3,voice), fax=COALESCE($4,fax) WHERE contact_id=$1")
+        sqlx::query("UPDATE contact_phones SET email = COALESCE($2, email), voice = COALESCE($3, voice), fax = CASE WHEN $4 THEN $5 ELSE fax END WHERE contact_id = $1")
             .bind(update.id)
             .bind(update.email)
             .bind(update.voice)
-            .bind(update.fax)
+            .bind(update.fax.is_some())
+            .bind(update.fax.flatten())
             .execute(&mut *tx)
             .await?;
     }
@@ -191,12 +206,15 @@ pub(crate) async fn apply_update(
         || update.postal_code.is_some()
         || update.country_code.is_some()
     {
-        sqlx::query("UPDATE contact_postal_info SET organization=COALESCE($2,organization), city=COALESCE($3,city), state_province=COALESCE($4,state_province), postal_code=COALESCE($5,postal_code), country_code=COALESCE($6,country_code) WHERE contact_id=$1 AND info_type='international'")
+        sqlx::query("UPDATE contact_postal_info SET organization = CASE WHEN $2 THEN $3 ELSE organization END, city = COALESCE($4, city), state_province = CASE WHEN $5 THEN $6 ELSE state_province END, postal_code = CASE WHEN $7 THEN $8 ELSE postal_code END, country_code = COALESCE($9, country_code) WHERE contact_id = $1 AND info_type = 'international'")
             .bind(update.id)
-            .bind(update.organization)
+            .bind(update.organization.is_some())
+            .bind(update.organization.flatten())
             .bind(update.city)
-            .bind(update.state_province)
-            .bind(update.postal_code)
+            .bind(update.state_province.is_some())
+            .bind(update.state_province.flatten())
+            .bind(update.postal_code.is_some())
+            .bind(update.postal_code.flatten())
             .bind(update.country_code)
             .execute(&mut *tx)
             .await?;
@@ -306,6 +324,7 @@ pub(crate) async fn create(
         .client_statuses
         .iter()
         .chain(contact.server_statuses.iter())
+        .filter(|status| !matches!(status, crate::domain::contact::ContactStatus::Ok))
     {
         sqlx::query("INSERT INTO contact_statuses (contact_id, status, source) VALUES ($1,$2,$3)")
             .bind(contact.id.into_uuid())
@@ -363,19 +382,7 @@ fn disclosure_field(field: crate::domain::contact::DisclosureField) -> &'static 
     }
 }
 fn status_value(status: crate::domain::contact::ContactStatus) -> &'static str {
-    match status {
-        crate::domain::contact::ContactStatus::ClientDeleteProhibited => "clientDeleteProhibited",
-        crate::domain::contact::ContactStatus::ClientTransferProhibited => {
-            "clientTransferProhibited"
-        }
-        crate::domain::contact::ContactStatus::ClientUpdateProhibited => "clientUpdateProhibited",
-        crate::domain::contact::ContactStatus::Linked => "linked",
-        crate::domain::contact::ContactStatus::Ok => "ok",
-        crate::domain::contact::ContactStatus::PendingCreate => "pendingCreate",
-        crate::domain::contact::ContactStatus::PendingDelete => "pendingDelete",
-        crate::domain::contact::ContactStatus::PendingTransfer => "pendingTransfer",
-        crate::domain::contact::ContactStatus::PendingUpdate => "pendingUpdate",
-    }
+    status.as_str()
 }
 
 #[cfg(test)]
@@ -529,5 +536,63 @@ mod tests {
         assert_eq!(email, "old@example.test");
         assert_eq!(fields, ["email"]);
         assert_eq!(status_count, 0);
+    }
+
+    #[ignore = "requires PostgreSQL; run through just test-with-db"]
+    #[sqlx::test(migrations = "../backend/migrations")]
+    async fn update_clears_optional_contact_fields(pool: PgPool) {
+        let (_, contact_id) = insert_test_contact(&pool).await;
+        sqlx::query("UPDATE contact_phones SET fax = '+7.4950000000' WHERE contact_id = $1")
+            .bind(contact_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            "UPDATE contact_postal_info SET organization = 'Example', state_province = 'Moscow', postal_code = '101000' WHERE contact_id = $1 AND info_type = 'international'",
+        )
+        .bind(contact_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        apply_update(
+            &pool,
+            ContactUpdate {
+                id: contact_id,
+                auth_info_ciphertext: None,
+                email: None,
+                voice: None,
+                fax: Some(None),
+                organization: Some(None),
+                city: None,
+                state_province: Some(None),
+                postal_code: Some(None),
+                country_code: None,
+                streets: &[],
+                add_statuses: &[],
+                remove_statuses: &[],
+                disclose_flag: None,
+                disclosure_fields: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let fax: Option<String> =
+            sqlx::query_scalar("SELECT fax FROM contact_phones WHERE contact_id = $1")
+                .bind(contact_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let row: (Option<String>, Option<String>, Option<String>) = sqlx::query_as(
+            "SELECT organization, state_province, postal_code FROM contact_postal_info WHERE contact_id = $1 AND info_type = 'international'",
+        )
+        .bind(contact_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        assert_eq!(fax, None);
+        assert_eq!(row, (None, None, None));
     }
 }

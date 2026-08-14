@@ -241,8 +241,11 @@ pub(crate) async fn execute_contact_info(
         .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?;
     let auth = String::from_utf8(auth)
         .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?;
-    match super::protocol::send_contact_info(stream, limits, &contact, &auth, cl_trid, sv_trid)
-        .await
+    let statuses = crate::application::effective_contact_statuses(&contact.statuses, false);
+    match super::protocol::send_contact_info(
+        stream, limits, &contact, &statuses, &auth, cl_trid, sv_trid,
+    )
+    .await
     {
         Ok(response) => Ok(response),
         Err(error) => {
@@ -288,6 +291,20 @@ pub(crate) async fn execute_contact_delete(
             limits,
             2201,
             "authorization error",
+            cl_trid,
+            sv_trid,
+        )
+        .await;
+    }
+    if crate::storage::contact::has_client_status(db, identity.id, "clientDeleteProhibited")
+        .await
+        .map_err(|error| super::framing::FrameError::Write(std::io::Error::other(error)))?
+    {
+        return super::protocol::send_response(
+            stream,
+            limits,
+            2304,
+            "object status prohibits operation",
             cl_trid,
             sv_trid,
         )
@@ -420,6 +437,20 @@ pub(crate) async fn execute_contact_update(
         )
         .await;
     }
+    if crate::storage::contact::has_client_status(db, identity.id, "clientUpdateProhibited")
+        .await
+        .map_err(|error| super::framing::FrameError::Write(std::io::Error::other(error)))?
+    {
+        return super::protocol::send_response(
+            stream,
+            limits,
+            2304,
+            "object status prohibits operation",
+            cl_trid,
+            sv_trid,
+        )
+        .await;
+    }
     let auth = match &command.chg_auth_info {
         crate::domain::contact::Patch::Set(value) => {
             let Some(cipher) = cipher else {
@@ -450,11 +481,13 @@ pub(crate) async fn execute_contact_update(
         _ => None,
     };
     let fax = match &command.chg_fax {
-        crate::domain::contact::Patch::Set(value) => Some(value.as_str()),
+        crate::domain::contact::Patch::Set(value) => Some(Some(value.as_str())),
+        crate::domain::contact::Patch::Clear => Some(None),
         _ => None,
     };
     let organization = match &command.chg_organization {
-        crate::domain::contact::Patch::Set(value) => Some(value.as_str()),
+        crate::domain::contact::Patch::Set(value) => Some(Some(value.as_str())),
+        crate::domain::contact::Patch::Clear => Some(None),
         _ => None,
     };
     let city = match &command.chg_city {
@@ -462,11 +495,13 @@ pub(crate) async fn execute_contact_update(
         _ => None,
     };
     let state_province = match &command.chg_state_province {
-        crate::domain::contact::Patch::Set(value) => Some(value.as_str()),
+        crate::domain::contact::Patch::Set(value) => Some(Some(value.as_str())),
+        crate::domain::contact::Patch::Clear => Some(None),
         _ => None,
     };
     let postal_code = match &command.chg_postal_code {
-        crate::domain::contact::Patch::Set(value) => Some(value.as_str()),
+        crate::domain::contact::Patch::Set(value) => Some(Some(value.as_str())),
+        crate::domain::contact::Patch::Clear => Some(None),
         _ => None,
     };
     let country_code = match &command.chg_country_code {

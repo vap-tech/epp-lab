@@ -4,6 +4,14 @@
 
 ### Changed
 
+- Made `ok` a derived Contact status for new objects and normalized legacy
+  stored status rows at the EPP and Admin read boundaries.
+- Added EPP `2304` enforcement for Contact update/delete operations blocked by
+  `clientUpdateProhibited` or `clientDeleteProhibited`.
+- Completed optional Contact update clearing for fax, organization,
+  state/province and postal code; empty XML elements now become SQL `NULL`.
+- Added PostgreSQL coverage for both atomic Contact update rollback and
+  optional-field clearing.
 - Added an AES-256-GCM SecretCipher boundary with random nonces and
   authentication-failure handling for future encrypted Contact authInfo.
 - Added optional `CONTACT_AUTHINFO_KEY_HEX` configuration validation and
