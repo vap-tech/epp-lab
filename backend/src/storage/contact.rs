@@ -172,6 +172,28 @@ pub(crate) async fn update_email_auth(
     Ok(true)
 }
 
+pub(crate) async fn update_client_statuses(
+    pool: &PgPool,
+    id: Uuid,
+    add: &[&str],
+    remove: &[&str],
+) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    for status in remove {
+        sqlx::query("DELETE FROM contact_statuses WHERE contact_id = $1 AND status = $2 AND source = 'client'")
+            .bind(id).bind(status).execute(&mut *tx).await?;
+    }
+    for status in add {
+        sqlx::query("INSERT INTO contact_statuses (contact_id, status, source) VALUES ($1, $2, 'client') ON CONFLICT DO NOTHING")
+            .bind(id).bind(status).execute(&mut *tx).await?;
+    }
+    sqlx::query("UPDATE contacts SET updated_at = NOW() WHERE id = $1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await
+}
+
 #[allow(dead_code)]
 pub(crate) async fn create_identity(
     pool: &PgPool,

@@ -332,12 +332,23 @@ pub(crate) async fn execute_contact_update(
     cl_trid: Option<&str>,
     sv_trid: &str,
 ) -> Result<super::protocol::Response, super::framing::FrameError> {
-    if !command.add_statuses.is_empty() || !command.rem_statuses.is_empty() {
+    let allowed = |status: &str| {
+        matches!(
+            status,
+            "clientDeleteProhibited" | "clientTransferProhibited" | "clientUpdateProhibited"
+        )
+    };
+    if command
+        .add_statuses
+        .iter()
+        .chain(command.rem_statuses.iter())
+        .any(|s| !allowed(s))
+    {
         return super::protocol::send_response(
             stream,
             limits,
-            super::protocol::COMMAND_NOT_SUPPORTED,
-            "status updates are not implemented yet",
+            super::protocol::COMMAND_USE_ERROR,
+            "status is not client-managed",
             cl_trid,
             sv_trid,
         )
@@ -367,6 +378,21 @@ pub(crate) async fn execute_contact_update(
             sv_trid,
         )
         .await;
+    }
+    if !command.add_statuses.is_empty() || !command.rem_statuses.is_empty() {
+        let add = command
+            .add_statuses
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        let remove = command
+            .rem_statuses
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        crate::storage::contact::update_client_statuses(db, identity.id, &add, &remove)
+            .await
+            .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?;
     }
     let auth = match &command.chg_auth_info {
         crate::domain::contact::Patch::Set(value) => {
