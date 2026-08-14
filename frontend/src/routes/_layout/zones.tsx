@@ -1,4 +1,9 @@
-import { createFileRoute, Link } from "@tanstack/react-router"
+import {
+  createFileRoute,
+  Link,
+  Outlet,
+  useRouterState,
+} from "@tanstack/react-router"
 import { Plus } from "lucide-react"
 import { useState } from "react"
 import { ApiError } from "@/api/http"
@@ -30,12 +35,17 @@ export const Route = createFileRoute("/_layout/zones")({
 })
 
 function Zones() {
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  })
   const zones = useZones()
   const createZone = useCreateZone()
   const [name, setName] = useState("")
   const [open, setOpen] = useState(false)
   const createError =
     createZone.error instanceof ApiError ? createZone.error.status : 0
+
+  if (pathname !== "/zones") return <Outlet />
 
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
