@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, Link } from "@tanstack/react-router"
 import { Plus } from "lucide-react"
 import { useState } from "react"
 import { ApiError } from "@/api/http"
@@ -119,7 +119,13 @@ function Zones() {
           {zones.data?.map((zone) => (
             <TableRow key={zone.id}>
               <TableCell>
-                <div className="font-medium">{zone.ascii_name}</div>
+                <Link
+                  className="font-medium text-primary hover:underline"
+                  to="/zones/$zoneId"
+                  params={{ zoneId: zone.id }}
+                >
+                  {zone.ascii_name}
+                </Link>
                 {zone.unicode_name !== zone.ascii_name ? (
                   <div className="text-sm text-muted-foreground">
                     {zone.unicode_name}

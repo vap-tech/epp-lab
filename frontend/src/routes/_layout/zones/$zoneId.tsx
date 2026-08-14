@@ -1,0 +1,152 @@
+import { createFileRoute } from "@tanstack/react-router"
+import { Badge } from "@/components/ui/badge"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
+import { useUpdateZone, useZone } from "@/hooks/useZones"
+
+const requirements = ["forbidden", "optional", "required"] as const
+type Requirement = (typeof requirements)[number]
+
+export const Route = createFileRoute("/_layout/zones/$zoneId")({
+  component: ZoneDetail,
+  head: () => ({ meta: [{ title: "Zone - EPP Lab" }] }),
+})
+
+function ZoneDetail() {
+  const { zoneId } = Route.useParams()
+  const query = useZone(zoneId)
+  const mutations = useUpdateZone(zoneId)
+
+  if (query.isPending)
+    return <p className="text-muted-foreground">Loading zone…</p>
+  if (query.isError || !query.data)
+    return <p className="text-destructive">Failed to load zone.</p>
+  const zone = query.data
+
+  return (
+    <section className="flex flex-col gap-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">{zone.ascii_name}</h1>
+        {zone.unicode_name !== zone.ascii_name ? (
+          <p className="text-muted-foreground">{zone.unicode_name}</p>
+        ) : null}
+      </div>
+      <section className="rounded-lg border p-6">
+        <h2 className="font-semibold">General</h2>
+        <div className="mt-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm text-muted-foreground">Status</p>
+            <Badge variant={zone.status === "active" ? "default" : "secondary"}>
+              {zone.status}
+            </Badge>
+          </div>
+          <Switch
+            checked={zone.status === "active"}
+            aria-label="Zone active"
+            onCheckedChange={(checked) =>
+              mutations.status.mutate(checked ? "active" : "disabled")
+            }
+          />
+        </div>
+      </section>
+      <section className="rounded-lg border p-6">
+        <h2 className="font-semibold">Contact Usage</h2>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <PolicySelect
+            label="Registrant"
+            value={zone.contact_policy.registrant}
+            onChange={(value) =>
+              mutations.contactPolicy.mutate({
+                ...zone.contact_policy,
+                registrant: value,
+              })
+            }
+          />
+          <PolicySelect
+            label="Admin"
+            value={zone.contact_policy.admin}
+            onChange={(value) =>
+              mutations.contactPolicy.mutate({
+                ...zone.contact_policy,
+                admin: value,
+              })
+            }
+          />
+          <PolicySelect
+            label="Tech"
+            value={zone.contact_policy.tech}
+            onChange={(value) =>
+              mutations.contactPolicy.mutate({
+                ...zone.contact_policy,
+                tech: value,
+              })
+            }
+          />
+          <PolicySelect
+            label="Billing"
+            value={zone.contact_policy.billing}
+            onChange={(value) =>
+              mutations.contactPolicy.mutate({
+                ...zone.contact_policy,
+                billing: value,
+              })
+            }
+          />
+        </div>
+        {zone.contactless ? (
+          <p className="mt-4 text-sm text-muted-foreground">
+            This is a contactless zone.
+          </p>
+        ) : null}
+      </section>
+      <section className="rounded-lg border p-6">
+        <h2 className="font-semibold">Extensions</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Enabled extensions: {zone.enabled_extensions_count}
+        </p>
+        {zone.enabled_extensions_count === 0 ? (
+          <p className="mt-4 text-sm text-muted-foreground">
+            No extensions enabled.
+          </p>
+        ) : null}
+      </section>
+    </section>
+  )
+}
+
+function PolicySelect({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: Requirement
+  onChange: (value: Requirement) => void
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <span className="text-sm">{label}</span>
+      <Select
+        value={value}
+        onValueChange={(next) => onChange(next as Requirement)}
+      >
+        <SelectTrigger className="w-32">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {requirements.map((requirement) => (
+            <SelectItem key={requirement} value={requirement}>
+              {requirement}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  )
+}

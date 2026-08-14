@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Added Zone detail UI with General status, Contact Usage policy controls and
+  Extensions summary, linked from the Zones list.
 - Added the Zones create dialog with real API mutation, CSRF handling,
   validation/duplicate feedback and list refresh.
 - Added the authenticated Zones frontend list and sidebar navigation backed by

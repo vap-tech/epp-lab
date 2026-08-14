@@ -29,3 +29,20 @@ export async function getZones() {
 export async function createZone(name: string) {
   return zoneSchema.parse(await api.post<Zone>("/zones", { name }))
 }
+
+export async function getZone(id: string) {
+  return zoneSchema.parse(await api.get<Zone>(`/zones/${id}`))
+}
+
+export async function updateZoneStatus(id: string, status: Zone["status"]) {
+  return zoneSchema.parse(await api.patch<Zone>(`/zones/${id}`, { status }))
+}
+
+export async function updateContactPolicy(
+  id: string,
+  policy: Zone["contact_policy"],
+) {
+  return zoneSchema.parse(
+    await api.patch<Zone>(`/zones/${id}/contact-policy`, policy),
+  )
+}
