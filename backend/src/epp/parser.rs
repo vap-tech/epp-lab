@@ -5,6 +5,7 @@ use quick_xml::{
 use std::io::Cursor;
 use thiserror::Error;
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum EppCommand {
     Hello,
@@ -13,10 +14,11 @@ pub(crate) enum EppCommand {
     Contact(ContactCommand),
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum ContactCommand {
     Check(ContactCheckCommand),
-    Create,
+    Create(ContactCreateCommand),
     Info,
     Update,
     Delete,
@@ -27,6 +29,24 @@ pub(crate) struct ContactCheckCommand {
     pub ids: Vec<String>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct ContactCreateCommand {
+    pub id: String,
+    pub name: String,
+    pub organization: Option<String>,
+    pub streets: Vec<String>,
+    pub city: String,
+    pub state_province: Option<String>,
+    pub postal_code: Option<String>,
+    pub country_code: String,
+    pub voice: String,
+    pub voice_extension: Option<String>,
+    pub fax: Option<String>,
+    pub fax_extension: Option<String>,
+    pub email: String,
+    pub auth_info: String,
+}
+
 impl EppCommand {
     pub(crate) fn name(&self) -> &'static str {
         match self {
@@ -34,7 +54,7 @@ impl EppCommand {
             Self::Login(_) => "login",
             Self::Logout => "logout",
             Self::Contact(ContactCommand::Check(_)) => "contact:check",
-            Self::Contact(ContactCommand::Create) => "contact:create",
+            Self::Contact(ContactCommand::Create(_)) => "contact:create",
             Self::Contact(ContactCommand::Info) => "contact:info",
             Self::Contact(ContactCommand::Update) => "contact:update",
             Self::Contact(ContactCommand::Delete) => "contact:delete",
@@ -87,6 +107,8 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
     let mut object_uris = Vec::new();
     let mut extension_uris = Vec::new();
     let mut contact_ids = Vec::new();
+    let mut contact_create_values = std::collections::BTreeMap::new();
+    let mut contact_streets = Vec::new();
     let mut root_seen = false;
     loop {
         match reader.read_event_into(&mut buf) {
@@ -126,7 +148,24 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                         ContactCheckCommand { ids: Vec::new() },
                     )));
                 } else if name.ends_with(b"create") {
-                    command = Some(EppCommand::Contact(ContactCommand::Create));
+                    command = Some(EppCommand::Contact(ContactCommand::Create(
+                        ContactCreateCommand {
+                            id: String::new(),
+                            name: String::new(),
+                            organization: None,
+                            streets: Vec::new(),
+                            city: String::new(),
+                            state_province: None,
+                            postal_code: None,
+                            country_code: String::new(),
+                            voice: String::new(),
+                            voice_extension: None,
+                            fax: None,
+                            fax_extension: None,
+                            email: String::new(),
+                            auth_info: String::new(),
+                        },
+                    )));
                 } else if name.ends_with(b"info") {
                     command = Some(EppCommand::Contact(ContactCommand::Info));
                 } else if name.ends_with(b"update") {
@@ -156,6 +195,40 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                     Some(name) if name.ends_with(b"objURI") => object_uris.push(value),
                     Some(name) if name.ends_with(b"extURI") => extension_uris.push(value),
                     Some(name) if name.ends_with(b"id") => contact_ids.push(value),
+                    Some(name) if name.ends_with(b"name") => {
+                        contact_create_values.insert("name", value);
+                    }
+                    Some(name) if name.ends_with(b"org") => {
+                        contact_create_values.insert("org", value);
+                    }
+                    Some(name) if name.ends_with(b"city") => {
+                        contact_create_values.insert("city", value);
+                    }
+                    Some(name) if name.ends_with(b"sp") => {
+                        contact_create_values.insert("sp", value);
+                    }
+                    Some(name) if name.ends_with(b"pc") => {
+                        contact_create_values.insert("pc", value);
+                    }
+                    Some(name) if name.ends_with(b"cc") => {
+                        contact_create_values.insert("cc", value);
+                    }
+                    Some(name) if name.ends_with(b"voice") => {
+                        contact_create_values.insert("voice", value);
+                    }
+                    Some(name) if name.ends_with(b"ext") => {
+                        contact_create_values.insert("ext", value);
+                    }
+                    Some(name) if name.ends_with(b"fax") => {
+                        contact_create_values.insert("fax", value);
+                    }
+                    Some(name) if name.ends_with(b"email") => {
+                        contact_create_values.insert("email", value);
+                    }
+                    Some(name) if name.ends_with(b"pw") => {
+                        contact_create_values.insert("pw", value);
+                    }
+                    Some(name) if name.ends_with(b"street") => contact_streets.push(value),
                     _ => {}
                 }
             }
@@ -196,6 +269,37 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                 command: EppCommand::Contact(ContactCommand::Check(ContactCheckCommand {
                     ids: contact_ids,
                 })),
+                cl_trid,
+            })
+        }
+        Some(EppCommand::Contact(ContactCommand::Create(mut create))) => {
+            create.id = contact_ids.first().cloned().ok_or(ParseError::Command)?;
+            create.name = contact_create_values
+                .remove("name")
+                .ok_or(ParseError::Command)?;
+            create.organization = contact_create_values.remove("org");
+            create.streets = contact_streets;
+            create.city = contact_create_values
+                .remove("city")
+                .ok_or(ParseError::Command)?;
+            create.state_province = contact_create_values.remove("sp");
+            create.postal_code = contact_create_values.remove("pc");
+            create.country_code = contact_create_values
+                .remove("cc")
+                .ok_or(ParseError::Command)?;
+            create.voice = contact_create_values
+                .remove("voice")
+                .ok_or(ParseError::Command)?;
+            create.voice_extension = contact_create_values.remove("ext");
+            create.fax = contact_create_values.remove("fax");
+            create.email = contact_create_values
+                .remove("email")
+                .ok_or(ParseError::Command)?;
+            create.auth_info = contact_create_values
+                .remove("pw")
+                .ok_or(ParseError::Command)?;
+            Ok(ParsedCommand {
+                command: EppCommand::Contact(ContactCommand::Create(create)),
                 cl_trid,
             })
         }
@@ -295,10 +399,10 @@ mod tests {
     #[test]
     fn recognizes_contact_commands_without_implementing_business_logic() {
         let parsed = parse_command(
-            br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><create xmlns:contact="urn:ietf:params:xml:ns:contact-1.0"><contact:create/></create></command></epp>"#,
+            br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><info xmlns:contact="urn:ietf:params:xml:ns:contact-1.0"><contact:info/></info></command></epp>"#,
         )
         .unwrap();
-        assert_eq!(parsed.name(), "contact:create");
+        assert_eq!(parsed.name(), "contact:info");
     }
 
     #[test]
