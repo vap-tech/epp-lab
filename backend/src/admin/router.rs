@@ -151,6 +151,7 @@ mod tests {
             .unwrap()
     }
 
+    #[ignore = "requires PostgreSQL; run through just test-with-db"]
     #[sqlx::test(migrations = "../backend/migrations")]
     async fn protects_zone_api_and_keeps_unknown_api_as_json_404(pool: PgPool) {
         let response = request(pool.clone(), "GET", "/api/zones").await;

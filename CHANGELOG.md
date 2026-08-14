@@ -4,6 +4,10 @@
 
 ### Changed
 
+- Added the initial RFC 5733 Contact domain foundation with validated
+  identities, postal data, phone/email values, statuses and disclosure types.
+- Added PostgreSQL-backed Admin API integration tests and a dedicated test
+  harness that includes ignored database tests and stops PostgreSQL afterward.
 - Added PostgreSQL-backed Zone persistence integration coverage for atomic
   creation, contact policy restoration, status updates and duplicate names.
 - Added PostgreSQL-backed Admin API regression coverage for Zone

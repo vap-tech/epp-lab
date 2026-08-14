@@ -258,6 +258,7 @@ mod tests {
 
     use super::*;
 
+    #[ignore = "requires PostgreSQL; run through just test-with-db"]
     #[sqlx::test(migrations = "../backend/migrations")]
     async fn persists_zone_and_contact_policy(pool: PgPool) {
         let zone = Zone {
@@ -290,6 +291,7 @@ mod tests {
         assert_eq!(to_domain(row).unwrap().status, ZoneStatus::Disabled);
     }
 
+    #[ignore = "requires PostgreSQL; run through just test-with-db"]
     #[sqlx::test(migrations = "../backend/migrations")]
     async fn rejects_duplicate_zone_name(pool: PgPool) {
         let make_zone = || Zone {
