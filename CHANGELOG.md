@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Refined XML viewer controls with shared switch-style Raw/Wrap display state,
+  per-payload copy icons, tooltips, and copy confirmation state.
 - Simplified XML viewer controls with shared Raw and Wrap toggles for request
   and response payloads while keeping Copy local to each payload.
 - Replaced Shiki with a minimal Prism XML tokenizer and custom EPP Lab token

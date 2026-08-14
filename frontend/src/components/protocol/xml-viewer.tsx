@@ -1,16 +1,25 @@
 import Prism from "prismjs"
 import "prismjs/components/prism-markup"
-import { useMemo } from "react"
+import { CheckIcon, CopyIcon } from "lucide-react"
+import { useMemo, useState } from "react"
 import { toast } from "sonner"
 import xmlFormat from "xml-formatter"
 
 import { Button } from "@/components/ui/button"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 type XmlViewerProps = {
   xml: string | null
   title?: string
   raw: boolean
   wrap: boolean
+  showDisplayControls?: boolean
+  onRawChange?: (value: boolean) => void
+  onWrapChange?: (value: boolean) => void
 }
 function safeFormatXml(xml: string) {
   try {
@@ -20,7 +29,16 @@ function safeFormatXml(xml: string) {
   }
 }
 
-export function XmlViewer({ xml, title, raw, wrap }: XmlViewerProps) {
+export function XmlViewer({
+  xml,
+  title,
+  raw,
+  wrap,
+  showDisplayControls = false,
+  onRawChange,
+  onWrapChange,
+}: XmlViewerProps) {
+  const [copied, setCopied] = useState(false)
   const originalXml = xml
   const displayXml = useMemo(
     () =>
@@ -38,23 +56,45 @@ export function XmlViewer({ xml, title, raw, wrap }: XmlViewerProps) {
         : Prism.highlight(displayXml, Prism.languages.markup, "xml"),
     [displayXml],
   )
+  const copyXml = () => {
+    if (originalXml === null) return
+    navigator.clipboard.writeText(originalXml).then(() => {
+      setCopied(true)
+      toast.success("Copied raw XML")
+      window.setTimeout(() => setCopied(false), 1200)
+    })
+  }
   return (
     <section className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
         <h2 className="font-semibold">{title}</h2>
-        {originalXml !== null ? (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              navigator.clipboard
-                .writeText(originalXml)
-                .then(() => toast.success("Copied to clipboard"))
-            }
-          >
-            Copy
-          </Button>
-        ) : null}
+        <div className="flex items-center gap-2">
+          {showDisplayControls ? (
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <SwitchControl label="Raw" checked={raw} onChange={onRawChange} />
+              <SwitchControl
+                label="Wrap"
+                checked={wrap}
+                onChange={onWrapChange}
+              />
+            </div>
+          ) : null}
+          {originalXml !== null ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Copy raw XML"
+                  onClick={copyXml}
+                >
+                  {copied ? <CheckIcon /> : <CopyIcon />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Copy raw XML</TooltipContent>
+            </Tooltip>
+          ) : null}
+        </div>
       </div>
       {originalXml === null ? (
         <p className="rounded-lg border p-4 text-sm text-muted-foreground">
@@ -74,5 +114,36 @@ export function XmlViewer({ xml, title, raw, wrap }: XmlViewerProps) {
         </pre>
       )}
     </section>
+  )
+}
+
+function SwitchControl({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string
+  checked: boolean
+  onChange?: (value: boolean) => void
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      className="flex items-center gap-1.5"
+      onClick={() => onChange?.(!checked)}
+    >
+      {label}
+      <span
+        aria-hidden="true"
+        className={`relative h-4 w-7 rounded-full transition-colors ${checked ? "bg-primary" : "bg-muted-foreground/40"}`}
+      >
+        <span
+          className={`absolute top-0.5 size-3 rounded-full bg-background transition-transform ${checked ? "translate-x-3.5" : "translate-x-0.5"}`}
+        />
+      </span>
+    </button>
   )
 }

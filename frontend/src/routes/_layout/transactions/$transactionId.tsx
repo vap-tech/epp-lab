@@ -2,7 +2,6 @@ import { createFileRoute, Link } from "@tanstack/react-router"
 import { useState } from "react"
 import { XmlViewer } from "@/components/protocol/xml-viewer"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { useEppTransaction } from "@/hooks/useEpp"
 
 export const Route = createFileRoute("/_layout/transactions/$transactionId")({
@@ -61,27 +60,14 @@ function TransactionDetail() {
         </Field>
       </div>
       <section className="flex flex-col gap-4">
-        <div className="flex justify-end gap-1">
-          <Button
-            variant={raw ? "default" : "secondary"}
-            size="sm"
-            onClick={() => setRaw((value) => !value)}
-          >
-            Raw
-          </Button>
-          <Button
-            variant={wrap ? "default" : "secondary"}
-            size="sm"
-            onClick={() => setWrap((value) => !value)}
-          >
-            Wrap
-          </Button>
-        </div>
         <XmlViewer
           title="Request XML"
           xml={item.request_xml}
           raw={raw}
           wrap={wrap}
+          showDisplayControls
+          onRawChange={setRaw}
+          onWrapChange={setWrap}
         />
         <XmlViewer
           title="Response XML"
