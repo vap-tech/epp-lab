@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Added CSRF-protected contact policy updates at
+  `PATCH /api/zones/:id/contact-policy` with explicit role enum validation.
 - Added authenticated Zone detail and status update endpoints; Zone rename and
   deletion remain unsupported.
 - Added CSRF-protected `POST /api/zones` with IDNA validation, explicit

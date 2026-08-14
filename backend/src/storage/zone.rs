@@ -78,6 +78,27 @@ pub(crate) async fn update_status(
 }
 
 #[allow(dead_code)]
+pub(crate) async fn update_contact_policy(
+    pool: &PgPool,
+    zone_id: Uuid,
+    policy: ContactUsagePolicy,
+    now: DateTime<Utc>,
+) -> Result<bool, sqlx::Error> {
+    let result = sqlx::query(
+        "UPDATE zone_contact_policies SET registrant_requirement = $2, admin_requirement = $3, tech_requirement = $4, billing_requirement = $5, updated_at = $6 WHERE zone_id = $1",
+    )
+    .bind(zone_id)
+    .bind(requirement_value(policy.registrant))
+    .bind(requirement_value(policy.admin))
+    .bind(requirement_value(policy.tech))
+    .bind(requirement_value(policy.billing))
+    .bind(now)
+    .execute(pool)
+    .await?;
+    Ok(result.rows_affected() == 1)
+}
+
+#[allow(dead_code)]
 pub(crate) async fn create(
     pool: &PgPool,
     zone: &Zone,

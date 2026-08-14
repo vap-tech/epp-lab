@@ -20,7 +20,10 @@ use super::{
     health::health,
     info::info,
     registrars::{create, get as get_registrar, list},
-    zones::{create as create_zone, get as get_zone, list as list_zones, update as update_zone},
+    zones::{
+        create as create_zone, get as get_zone, list as list_zones, update as update_zone,
+        update_contact_policy,
+    },
 };
 
 pub(crate) fn router(state: Arc<AppState>) -> Router {
@@ -42,6 +45,10 @@ pub(crate) fn router(state: Arc<AppState>) -> Router {
         .route("/api/registrars", get(list).post(create))
         .route("/api/zones", get(list_zones).post(create_zone))
         .route("/api/zones/{id}", get(get_zone).patch(update_zone))
+        .route(
+            "/api/zones/{id}/contact-policy",
+            axum::routing::patch(update_contact_policy),
+        )
         .route("/api/registrars/{id}", get(get_registrar))
         .route(
             "/api/registrars/{id}/certificates",

@@ -155,6 +155,36 @@ pub(crate) async fn update(
     get(_session, Path(id), State(state)).await
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct ContactPolicyRequest {
+    pub registrant: String,
+    pub admin: String,
+    pub tech: String,
+    pub billing: String,
+}
+
+pub(crate) async fn update_contact_policy(
+    _session: AdminSession,
+    _csrf: CsrfProtected,
+    Path(id): Path<Uuid>,
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<ContactPolicyRequest>,
+) -> Result<Json<ZoneResponse>, StatusCode> {
+    let policy = crate::domain::zone::ContactUsagePolicy {
+        registrant: parse_requirement(&request.registrant).map_err(|_| StatusCode::BAD_REQUEST)?,
+        admin: parse_requirement(&request.admin).map_err(|_| StatusCode::BAD_REQUEST)?,
+        tech: parse_requirement(&request.tech).map_err(|_| StatusCode::BAD_REQUEST)?,
+        billing: parse_requirement(&request.billing).map_err(|_| StatusCode::BAD_REQUEST)?,
+    };
+    if !zone::update_contact_policy(&state.db, id, policy, chrono::Utc::now())
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    get(_session, Path(id), State(state)).await
+}
+
 fn parse_requirement(value: &str) -> Result<crate::domain::zone::ContactRequirement, String> {
     match value {
         "forbidden" => Ok(crate::domain::zone::ContactRequirement::Forbidden),
