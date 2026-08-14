@@ -49,6 +49,8 @@ pub(crate) struct ContactUpdateCommand {
     pub chg_postal_code: crate::domain::contact::Patch<String>,
     pub chg_country_code: crate::domain::contact::Patch<String>,
     pub chg_streets: Vec<String>,
+    pub chg_disclose: crate::domain::contact::Patch<String>,
+    pub chg_disclose_fields: Vec<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -228,6 +230,8 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                             chg_postal_code: Default::default(),
                             chg_country_code: Default::default(),
                             chg_streets: Vec::new(),
+                            chg_disclose: Default::default(),
+                            chg_disclose_fields: Vec::new(),
                         },
                     )));
                 } else if name.ends_with(b"delete") {
@@ -251,6 +255,15 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                     } else if path.iter().any(|part| part.ends_with(b"rem")) {
                         contact_rem_statuses.push(status.into_owned());
                     }
+                }
+                if name.ends_with(b"disclose")
+                    && let Some(flag) = event
+                        .attributes()
+                        .flatten()
+                        .find(|attribute| attribute.key.as_ref() == b"flag")
+                        .and_then(|attribute| attribute.unescape_value().ok())
+                {
+                    contact_create_values.insert("disclose", flag.into_owned());
                 }
                 if name.ends_with(b"hello") {
                     command = Some(EppCommand::Hello);
@@ -426,6 +439,10 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                 .map(crate::domain::contact::Patch::Set)
                 .unwrap_or_default();
             update.chg_streets = contact_streets;
+            update.chg_disclose = contact_create_values
+                .remove("disclose")
+                .map(crate::domain::contact::Patch::Set)
+                .unwrap_or_default();
             if update.add_statuses.is_empty()
                 && update.rem_statuses.is_empty()
                 && update.chg_email.is_unchanged()
@@ -438,6 +455,8 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                 && update.chg_postal_code.is_unchanged()
                 && update.chg_country_code.is_unchanged()
                 && update.chg_streets.is_empty()
+                && update.chg_disclose.is_unchanged()
+                && update.chg_disclose_fields.is_empty()
             {
                 return Err(ParseError::Command);
             }
@@ -593,6 +612,8 @@ mod tests {
                 chg_postal_code: crate::domain::contact::Patch::Unchanged,
                 chg_country_code: crate::domain::contact::Patch::Unchanged,
                 chg_streets: vec![],
+                chg_disclose: crate::domain::contact::Patch::Unchanged,
+                chg_disclose_fields: vec![],
             }))
         );
     }
@@ -619,6 +640,8 @@ mod tests {
                 chg_postal_code: crate::domain::contact::Patch::Unchanged,
                 chg_country_code: crate::domain::contact::Patch::Unchanged,
                 chg_streets: vec![],
+                chg_disclose: crate::domain::contact::Patch::Unchanged,
+                chg_disclose_fields: vec![],
             }))
         );
         let redacted = redact_password(
