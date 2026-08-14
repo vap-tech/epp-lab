@@ -251,3 +251,58 @@ fn parse_requirement(value: &str) -> Result<ContactRequirement, String> {
         _ => Err(format!("unknown contact requirement: {value}")),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use chrono::{Duration, Utc};
+
+    use super::*;
+
+    #[sqlx::test(migrations = "../backend/migrations")]
+    async fn persists_zone_and_contact_policy(pool: PgPool) {
+        let zone = Zone {
+            id: ZoneId::new(Uuid::new_v4()),
+            name: ZoneName::parse("example").unwrap(),
+            status: ZoneStatus::Active,
+            contact_policy: ContactUsagePolicy {
+                registrant: ContactRequirement::Forbidden,
+                admin: ContactRequirement::Optional,
+                tech: ContactRequirement::Required,
+                billing: ContactRequirement::Forbidden,
+            },
+        };
+        let now = Utc::now();
+
+        create(&pool, &zone, now).await.unwrap();
+        let row = find(&pool, zone.id.into_uuid()).await.unwrap().unwrap();
+        let restored = to_domain(row).unwrap();
+        assert_eq!(restored, zone);
+
+        update_status(
+            &pool,
+            zone.id.into_uuid(),
+            "disabled",
+            now + Duration::seconds(1),
+        )
+        .await
+        .unwrap();
+        let row = find(&pool, zone.id.into_uuid()).await.unwrap().unwrap();
+        assert_eq!(to_domain(row).unwrap().status, ZoneStatus::Disabled);
+    }
+
+    #[sqlx::test(migrations = "../backend/migrations")]
+    async fn rejects_duplicate_zone_name(pool: PgPool) {
+        let make_zone = || Zone {
+            id: ZoneId::new(Uuid::new_v4()),
+            name: ZoneName::parse("example").unwrap(),
+            status: ZoneStatus::Active,
+            contact_policy: ContactUsagePolicy::default(),
+        };
+        let now = Utc::now();
+        create(&pool, &make_zone(), now).await.unwrap();
+        let error = create(&pool, &make_zone(), now).await.unwrap_err();
+        assert!(
+            matches!(error, sqlx::Error::Database(database_error) if database_error.constraint() == Some("zones_ascii_name_key"))
+        );
+    }
+}

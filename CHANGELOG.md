@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Added PostgreSQL-backed Zone persistence integration coverage for atomic
+  creation, contact policy restoration, status updates and duplicate names.
 - Moved Zone creation, status changes and contact policy mutations behind the
   application boundary, keeping HTTP handlers focused on adapter concerns.
 - Connected EPP greeting and login service negotiation to the active Zone
