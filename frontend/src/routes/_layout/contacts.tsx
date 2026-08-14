@@ -45,6 +45,7 @@ function Contacts() {
             <TableHead>Contact ID</TableHead>
             <TableHead>ROID</TableHead>
             <TableHead>Email</TableHead>
+            <TableHead>Registrar</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Linked</TableHead>
           </TableRow>
@@ -64,6 +65,9 @@ function Contacts() {
               <TableCell>{contact.roid}</TableCell>
               <TableCell>{contact.email}</TableCell>
               <TableCell>
+                {contact.registrar_handle ?? contact.registrar_id}
+              </TableCell>
+              <TableCell>
                 <div className="flex flex-wrap gap-1">
                   {contact.statuses.map((status) => (
                     <Badge key={status} variant="secondary">
@@ -78,7 +82,7 @@ function Contacts() {
           {contacts.data?.length === 0 ? (
             <TableRow>
               <TableCell
-                colSpan={5}
+                colSpan={6}
                 className="h-24 text-center text-muted-foreground"
               >
                 No contacts registered.

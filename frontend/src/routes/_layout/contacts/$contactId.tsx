@@ -47,7 +47,7 @@ function ContactDetail() {
           </div>
           <div>
             <dt className="text-sm text-muted-foreground">Registrar</dt>
-            <dd className="break-all">{item.registrar_id}</dd>
+            <dd>{item.registrar_handle ?? item.registrar_id}</dd>
           </div>
           <div>
             <dt className="text-sm text-muted-foreground">Created</dt>
@@ -56,6 +56,54 @@ function ContactDetail() {
           <div>
             <dt className="text-sm text-muted-foreground">Updated</dt>
             <dd>{new Date(item.updated_at).toLocaleString()}</dd>
+          </div>
+        </dl>
+      </div>
+      <div className="rounded-xl border p-6">
+        <h2 className="font-semibold">Postal info</h2>
+        <dl className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div>
+            <dt className="text-sm text-muted-foreground">Name</dt>
+            <dd>{item.name ?? "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-sm text-muted-foreground">Organization</dt>
+            <dd>{item.organization ?? "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-sm text-muted-foreground">Address</dt>
+            <dd>
+              {item.streets?.join(", ") ?? "—"}, {item.city ?? "—"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-sm text-muted-foreground">Country</dt>
+            <dd>{item.country_code ?? "—"}</dd>
+          </div>
+        </dl>
+      </div>
+      <div className="rounded-xl border p-6">
+        <h2 className="font-semibold">Communication</h2>
+        <dl className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div>
+            <dt className="text-sm text-muted-foreground">Voice</dt>
+            <dd>
+              {item.voice ?? "—"}
+              {item.voice_extension ? ` ext. ${item.voice_extension}` : ""}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-sm text-muted-foreground">Fax</dt>
+            <dd>{item.fax ?? "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-sm text-muted-foreground">Disclosure</dt>
+            <dd>
+              {item.disclose_flag ?? "—"}
+              {item.disclosure_fields?.length
+                ? ` (${item.disclosure_fields.join(", ")})`
+                : ""}
+            </dd>
           </div>
         </dl>
       </div>

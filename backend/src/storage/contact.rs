@@ -24,7 +24,33 @@ pub(crate) struct ContactSummaryRow {
     pub id: Uuid,
     pub roid: String,
     pub sponsoring_registrar_id: Uuid,
+    pub registrar_handle: Option<String>,
     pub email: String,
+    pub statuses: Vec<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub(crate) struct ContactDetailRow {
+    pub id: Uuid,
+    pub roid: String,
+    pub sponsoring_registrar_id: Uuid,
+    pub registrar_handle: Option<String>,
+    pub email: String,
+    pub voice: String,
+    pub voice_extension: Option<String>,
+    pub fax: Option<String>,
+    pub fax_extension: Option<String>,
+    pub name: String,
+    pub organization: Option<String>,
+    pub streets: Vec<String>,
+    pub city: String,
+    pub state_province: Option<String>,
+    pub postal_code: Option<String>,
+    pub country_code: String,
+    pub disclose_flag: String,
+    pub disclosure_fields: Vec<String>,
     pub statuses: Vec<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -32,32 +58,37 @@ pub(crate) struct ContactSummaryRow {
 
 pub(crate) async fn list_summaries(pool: &PgPool) -> Result<Vec<ContactSummaryRow>, sqlx::Error> {
     sqlx::query_as(
-        r#"SELECT c.id, c.roid, c.sponsoring_registrar_id, p.email,
+        r#"SELECT c.id, c.roid, c.sponsoring_registrar_id, r.handle AS registrar_handle, p.email,
                   COALESCE(array_agg(DISTINCT s.status) FILTER (WHERE s.status IS NOT NULL), '{}') AS statuses,
                   c.created_at, c.updated_at
-           FROM contacts c
+           FROM contacts c JOIN registrars r ON r.id = c.sponsoring_registrar_id
            JOIN contact_phones p ON p.contact_id = c.id
            LEFT JOIN contact_statuses s ON s.contact_id = c.id
-           GROUP BY c.id, c.roid, c.sponsoring_registrar_id, p.email, c.created_at, c.updated_at
+           GROUP BY c.id, c.roid, c.sponsoring_registrar_id, r.handle, p.email, c.created_at, c.updated_at
            ORDER BY c.created_at DESC"#,
     )
     .fetch_all(pool)
     .await
 }
 
-pub(crate) async fn find_summary(
+pub(crate) async fn find_detail(
     pool: &PgPool,
     id: Uuid,
-) -> Result<Option<ContactSummaryRow>, sqlx::Error> {
+) -> Result<Option<ContactDetailRow>, sqlx::Error> {
     sqlx::query_as(
-        r#"SELECT c.id, c.roid, c.sponsoring_registrar_id, p.email,
-                  COALESCE(array_agg(DISTINCT s.status) FILTER (WHERE s.status IS NOT NULL), '{}') AS statuses,
+        r#"SELECT c.id, c.roid, c.sponsoring_registrar_id, r.handle AS registrar_handle,
+                  p.email, p.voice, p.voice_extension, p.fax, p.fax_extension,
+                  pi.name, pi.organization,
+                  COALESCE((SELECT array_agg(ps.street ORDER BY ps.position) FROM contact_postal_streets ps WHERE ps.contact_id = c.id AND ps.info_type = 'international'), '{}') AS streets,
+                  pi.city, pi.state_province, pi.postal_code, pi.country_code,
+                  c.disclose_flag,
+                  COALESCE((SELECT array_agg(df.field ORDER BY df.field) FROM contact_disclosure_fields df WHERE df.contact_id = c.id), '{}') AS disclosure_fields,
+                  COALESCE((SELECT array_agg(DISTINCT s.status) FROM contact_statuses s WHERE s.contact_id = c.id), '{}') AS statuses,
                   c.created_at, c.updated_at
-           FROM contacts c
+           FROM contacts c JOIN registrars r ON r.id = c.sponsoring_registrar_id
            JOIN contact_phones p ON p.contact_id = c.id
-           LEFT JOIN contact_statuses s ON s.contact_id = c.id
-           WHERE c.id = $1
-           GROUP BY c.id, c.roid, c.sponsoring_registrar_id, p.email, c.created_at, c.updated_at"#,
+           JOIN contact_postal_info pi ON pi.contact_id = c.id AND pi.info_type = 'international'
+           WHERE c.id = $1"#,
     )
     .bind(id)
     .fetch_optional(pool)
