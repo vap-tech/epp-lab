@@ -190,7 +190,10 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                     .into_owned();
                 match path.last().map(Vec::as_slice) {
                     Some(name) if name.ends_with(b"clID") => client_id = Some(value),
-                    Some(name) if name.ends_with(b"pw") => password = Some(value),
+                    Some(name) if name.ends_with(b"pw") => {
+                        password = Some(value.clone());
+                        contact_create_values.insert("pw", value);
+                    }
                     Some(name) if name.ends_with(b"clTRID") => cl_trid = Some(value),
                     Some(name) if name.ends_with(b"objURI") => object_uris.push(value),
                     Some(name) if name.ends_with(b"extURI") => extension_uris.push(value),
@@ -224,9 +227,6 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                     }
                     Some(name) if name.ends_with(b"email") => {
                         contact_create_values.insert("email", value);
-                    }
-                    Some(name) if name.ends_with(b"pw") => {
-                        contact_create_values.insert("pw", value);
                     }
                     Some(name) if name.ends_with(b"street") => contact_streets.push(value),
                     _ => {}
@@ -417,6 +417,23 @@ mod tests {
                 ids: vec!["C123".into(), "C456".into()]
             }))
         );
+    }
+
+    #[test]
+    fn parses_contact_create_required_and_optional_fields() {
+        let parsed = parse_command(
+            br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><create><contact:create xmlns:contact="urn:ietf:params:xml:ns:contact-1.0"><contact:id>C123</contact:id><contact:postalInfo type="int"><contact:name>Name</contact:name><contact:org>Org</contact:org><contact:addr><contact:street>Main 1</contact:street><contact:city>Moscow</contact:city><contact:cc>RU</contact:cc></contact:addr></contact:postalInfo><contact:voice x="123">+70000000000</contact:voice><contact:email>a@example.test</contact:email><contact:authInfo><contact:pw>secret</contact:pw></contact:authInfo></contact:create></create></command></epp>"#,
+        )
+        .unwrap();
+        let EppCommand::Contact(ContactCommand::Create(create)) = parsed.command else {
+            panic!("expected contact create");
+        };
+        assert_eq!(create.id, "C123");
+        assert_eq!(create.name, "Name");
+        assert_eq!(create.organization.as_deref(), Some("Org"));
+        assert_eq!(create.streets, vec!["Main 1"]);
+        assert_eq!(create.country_code, "RU");
+        assert_eq!(create.auth_info, "secret");
     }
 
     #[test]
