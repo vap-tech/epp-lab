@@ -460,6 +460,7 @@ dependencies = [
  "axum-server",
  "chrono",
  "hex",
+ "idna",
  "quick-xml",
  "rustls-pemfile",
  "serde",

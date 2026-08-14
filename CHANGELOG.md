@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Added the Stage 3 implementation plan and the synchronous Zone domain
+  foundation with IDNA names, contact usage policy and suffix resolution.
 - Refined XML viewer controls with shared switch-style Raw/Wrap display state,
   per-payload copy icons, tooltips, and copy confirmation state.
 - Simplified XML viewer controls with shared Raw and Wrap toggles for request

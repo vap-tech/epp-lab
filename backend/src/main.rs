@@ -1,6 +1,7 @@
 mod admin;
 mod app;
 mod config;
+pub mod domain;
 pub mod epp;
 mod observability;
 mod registry;
