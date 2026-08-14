@@ -44,6 +44,11 @@ pub(crate) struct ContactUpdateCommand {
     pub chg_voice: crate::domain::contact::Patch<String>,
     pub chg_fax: crate::domain::contact::Patch<String>,
     pub chg_organization: crate::domain::contact::Patch<String>,
+    pub chg_city: crate::domain::contact::Patch<String>,
+    pub chg_state_province: crate::domain::contact::Patch<String>,
+    pub chg_postal_code: crate::domain::contact::Patch<String>,
+    pub chg_country_code: crate::domain::contact::Patch<String>,
+    pub chg_streets: Vec<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -218,6 +223,11 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                             chg_voice: Default::default(),
                             chg_fax: Default::default(),
                             chg_organization: Default::default(),
+                            chg_city: Default::default(),
+                            chg_state_province: Default::default(),
+                            chg_postal_code: Default::default(),
+                            chg_country_code: Default::default(),
+                            chg_streets: Vec::new(),
                         },
                     )));
                 } else if name.ends_with(b"delete") {
@@ -399,6 +409,23 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                 .remove("org")
                 .map(crate::domain::contact::Patch::Set)
                 .unwrap_or_default();
+            update.chg_city = contact_create_values
+                .remove("city")
+                .map(crate::domain::contact::Patch::Set)
+                .unwrap_or_default();
+            update.chg_state_province = contact_create_values
+                .remove("sp")
+                .map(crate::domain::contact::Patch::Set)
+                .unwrap_or_default();
+            update.chg_postal_code = contact_create_values
+                .remove("pc")
+                .map(crate::domain::contact::Patch::Set)
+                .unwrap_or_default();
+            update.chg_country_code = contact_create_values
+                .remove("cc")
+                .map(crate::domain::contact::Patch::Set)
+                .unwrap_or_default();
+            update.chg_streets = contact_streets;
             if update.add_statuses.is_empty()
                 && update.rem_statuses.is_empty()
                 && update.chg_email.is_unchanged()
@@ -406,6 +433,11 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                 && update.chg_voice.is_unchanged()
                 && update.chg_fax.is_unchanged()
                 && update.chg_organization.is_unchanged()
+                && update.chg_city.is_unchanged()
+                && update.chg_state_province.is_unchanged()
+                && update.chg_postal_code.is_unchanged()
+                && update.chg_country_code.is_unchanged()
+                && update.chg_streets.is_empty()
             {
                 return Err(ParseError::Command);
             }
@@ -556,6 +588,11 @@ mod tests {
                 chg_voice: crate::domain::contact::Patch::Unchanged,
                 chg_fax: crate::domain::contact::Patch::Unchanged,
                 chg_organization: crate::domain::contact::Patch::Unchanged,
+                chg_city: crate::domain::contact::Patch::Unchanged,
+                chg_state_province: crate::domain::contact::Patch::Unchanged,
+                chg_postal_code: crate::domain::contact::Patch::Unchanged,
+                chg_country_code: crate::domain::contact::Patch::Unchanged,
+                chg_streets: vec![],
             }))
         );
     }
@@ -577,6 +614,11 @@ mod tests {
                 chg_voice: crate::domain::contact::Patch::Unchanged,
                 chg_fax: crate::domain::contact::Patch::Unchanged,
                 chg_organization: crate::domain::contact::Patch::Unchanged,
+                chg_city: crate::domain::contact::Patch::Unchanged,
+                chg_state_province: crate::domain::contact::Patch::Unchanged,
+                chg_postal_code: crate::domain::contact::Patch::Unchanged,
+                chg_country_code: crate::domain::contact::Patch::Unchanged,
+                chg_streets: vec![],
             }))
         );
         let redacted = redact_password(
