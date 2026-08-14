@@ -17,10 +17,13 @@ export function useEppSessions(page = 1) {
     queryFn: () => getSessions(page),
   })
 }
-export function useEppTransactions(page = 1) {
+export function useEppTransactions(
+  page = 1,
+  filters: { command?: string; delivery_status?: string; trid?: string } = {},
+) {
   return useQuery({
-    queryKey: eppKeys.transactions(page),
-    queryFn: () => getTransactions(page),
+    queryKey: [...eppKeys.transactions(page), filters],
+    queryFn: () => getTransactions(page, filters),
   })
 }
 export function useEppSession(id: string) {

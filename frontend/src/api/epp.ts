@@ -64,11 +64,18 @@ export async function getSessions(pageNumber = 1) {
     ),
   )
 }
-export async function getTransactions(pageNumber = 1) {
+export async function getTransactions(
+  pageNumber = 1,
+  filters: { command?: string; delivery_status?: string; trid?: string } = {},
+) {
+  const params = new URLSearchParams({
+    page: String(pageNumber),
+    page_size: "50",
+  })
+  for (const [key, value] of Object.entries(filters))
+    if (value) params.set(key, value)
   return page(transactionSchema).parse(
-    await api.get<Page<EppTransaction>>(
-      `/epp/transactions?page=${pageNumber}&page_size=50`,
-    ),
+    await api.get<Page<EppTransaction>>(`/epp/transactions?${params}`),
   )
 }
 export async function getSession(id: string) {

@@ -12,17 +12,22 @@ import { useEppTransactions } from "@/hooks/useEpp"
 
 export const Route = createFileRoute("/_layout/transactions")({
   component: Transactions,
-  validateSearch: z.object({ page: z.coerce.number().int().min(1).catch(1) }),
+  validateSearch: z.object({
+    page: z.coerce.number().int().min(1).catch(1),
+    command: z.string().optional(),
+    delivery_status: z.string().optional(),
+    trid: z.string().optional(),
+  }),
   head: () => ({ meta: [{ title: "EPP Transactions - EPP Lab" }] }),
 })
 
 function Transactions() {
-  const { page } = Route.useSearch()
+  const { page, command, delivery_status, trid } = Route.useSearch()
   const navigate = Route.useNavigate()
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   })
-  const query = useEppTransactions(page)
+  const query = useEppTransactions(page, { command, delivery_status, trid })
   if (pathname !== "/transactions") return <Outlet />
   return (
     <section className="flex flex-col gap-6">
@@ -38,6 +43,62 @@ function Transactions() {
         <Button variant="outline" onClick={() => query.refetch()}>
           Refresh
         </Button>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <input
+          className="h-9 rounded-md border bg-background px-3 text-sm"
+          placeholder="Search clTRID or svTRID"
+          defaultValue={trid}
+          onKeyDown={(event) => {
+            if (event.key === "Enter")
+              navigate({
+                search: {
+                  page: 1,
+                  command,
+                  delivery_status,
+                  trid: event.currentTarget.value || undefined,
+                },
+              })
+          }}
+        />
+        <select
+          className="h-9 rounded-md border bg-background px-3 text-sm"
+          value={command ?? ""}
+          onChange={(event) =>
+            navigate({
+              search: {
+                page: 1,
+                command: event.target.value || undefined,
+                delivery_status,
+                trid,
+              },
+            })
+          }
+        >
+          <option value="">All commands</option>
+          <option value="hello">hello</option>
+          <option value="login">login</option>
+          <option value="logout">logout</option>
+        </select>
+        <select
+          className="h-9 rounded-md border bg-background px-3 text-sm"
+          value={delivery_status ?? ""}
+          onChange={(event) =>
+            navigate({
+              search: {
+                page: 1,
+                command,
+                delivery_status: event.target.value || undefined,
+                trid,
+              },
+            })
+          }
+        >
+          <option value="">All delivery</option>
+          <option value="delivered">delivered</option>
+          <option value="failed">failed</option>
+          <option value="unknown">unknown</option>
+        </select>
       </div>
       {query.isPending ? (
         <p className="text-muted-foreground">Loading transactions…</p>
