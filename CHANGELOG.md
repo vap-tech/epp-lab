@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Added the authenticated read-only `GET /api/zones` endpoint with explicit
+  Zone and contact policy DTOs.
 - Added SQLx persistence operations for listing and toggling zone extension
   assignments with deterministic ordering and upsert semantics.
 - Added deterministic advertised-extension calculation from registered

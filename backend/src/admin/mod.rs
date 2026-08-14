@@ -5,5 +5,6 @@ pub(crate) mod health;
 pub(crate) mod info;
 pub(crate) mod registrars;
 pub(crate) mod router;
+pub(crate) mod zones;
 
 pub(crate) use router::router;

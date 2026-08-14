@@ -13,6 +13,9 @@ pub(crate) struct ZoneRow {
     pub ascii_name: String,
     pub unicode_name: Option<String>,
     pub status: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub enabled_extensions_count: i64,
     pub registrant_requirement: String,
     pub admin_requirement: String,
     pub tech_requirement: String,
@@ -25,7 +28,10 @@ pub(crate) async fn list(pool: &PgPool) -> Result<Vec<ZoneRow>, sqlx::Error> {
         r#"
         SELECT z.id, z.ascii_name, z.unicode_name, z.status,
                p.registrant_requirement, p.admin_requirement,
-               p.tech_requirement, p.billing_requirement
+               p.tech_requirement, p.billing_requirement,
+               z.created_at, z.updated_at,
+               (SELECT COUNT(*) FROM zone_extensions e
+                WHERE e.zone_id = z.id AND e.enabled) AS enabled_extensions_count
         FROM zones z
         JOIN zone_contact_policies p ON p.zone_id = z.id
         ORDER BY z.ascii_name
@@ -41,7 +47,10 @@ pub(crate) async fn find(pool: &PgPool, id: Uuid) -> Result<Option<ZoneRow>, sql
         r#"
         SELECT z.id, z.ascii_name, z.unicode_name, z.status,
                p.registrant_requirement, p.admin_requirement,
-               p.tech_requirement, p.billing_requirement
+               p.tech_requirement, p.billing_requirement,
+               z.created_at, z.updated_at,
+               (SELECT COUNT(*) FROM zone_extensions e
+                WHERE e.zone_id = z.id AND e.enabled) AS enabled_extensions_count
         FROM zones z
         JOIN zone_contact_policies p ON p.zone_id = z.id
         WHERE z.id = $1
