@@ -208,7 +208,7 @@ async fn _read_marker<S: AsyncRead + Unpin>(_stream: &mut S) {}
 mod tests {
     use std::time::Duration;
 
-    use super::{escape_xml, send_greeting};
+    use super::{escape_xml, send_contact_info, send_greeting};
     use crate::epp::framing::{FrameLimits, read_frame};
     use tokio::io::duplex;
 
@@ -242,5 +242,49 @@ mod tests {
 
         assert!(greeting.contains(&format!("<extURI>{extension}</extURI>")));
         assert!(frame.contains(&format!("<extURI>{extension}</extURI>")));
+    }
+
+    #[tokio::test]
+    async fn contact_info_keeps_auth_info_out_of_persisted_response() {
+        let (mut client, mut server) = duplex(4096);
+        let now = chrono::Utc::now();
+        let contact = crate::storage::contact::ContactDetailRow {
+            id: uuid::Uuid::new_v4(),
+            roid: "C123".into(),
+            sponsoring_registrar_id: uuid::Uuid::new_v4(),
+            registrar_handle: Some("demo".into()),
+            email: "contact@example.test".into(),
+            voice: "+70000000000".into(),
+            voice_extension: None,
+            fax: None,
+            fax_extension: None,
+            name: "Test Contact".into(),
+            organization: None,
+            streets: vec!["Main 1".into()],
+            city: "Moscow".into(),
+            state_province: None,
+            postal_code: None,
+            country_code: "RU".into(),
+            disclose_flag: "private".into(),
+            disclosure_fields: vec![],
+            statuses: vec!["ok".into()],
+            created_at: now,
+            updated_at: now,
+        };
+        let response = send_contact_info(
+            &mut client,
+            &limits(),
+            &contact,
+            "secret-auth",
+            Some("T1"),
+            "S1",
+        )
+        .await
+        .unwrap();
+        let frame = String::from_utf8(read_frame(&mut server, &limits()).await.unwrap()).unwrap();
+        assert!(frame.contains("secret-auth"));
+        assert!(response.xml.contains("secret-auth"));
+        assert!(!response.persisted_xml.contains("secret-auth"));
+        assert!(response.persisted_xml.contains("REDACTED"));
     }
 }
