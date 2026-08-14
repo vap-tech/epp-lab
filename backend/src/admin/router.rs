@@ -91,3 +91,75 @@ pub(crate) fn router(state: Arc<AppState>) -> Router {
 async fn api_not_found() -> impl IntoResponse {
     StatusCode::NOT_FOUND
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{net::SocketAddr, sync::Arc, time::Duration};
+
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+        response::Response,
+    };
+    use sqlx::PgPool;
+    use tower::ServiceExt;
+
+    use super::router;
+    use crate::{app::AppState, config::Settings, domain::extension::ExtensionRegistry};
+
+    fn settings() -> Settings {
+        Settings {
+            app_env: "test".to_owned(),
+            admin_bind: "127.0.0.1:0".parse::<SocketAddr>().unwrap(),
+            admin_tls_cert: String::new(),
+            admin_tls_key: String::new(),
+            frontend_dist: ".".to_owned(),
+            epp_bind: "127.0.0.1:0".parse::<SocketAddr>().unwrap(),
+            database_url: String::new(),
+            epp_tls_cert: String::new(),
+            epp_tls_key: String::new(),
+            epp_client_ca: String::new(),
+            epp_read_timeout: Duration::from_secs(1),
+            epp_tls_handshake_timeout: Duration::from_secs(1),
+            epp_write_timeout: Duration::from_secs(1),
+            epp_idle_timeout: None,
+            epp_shutdown_grace_period: Duration::from_secs(1),
+            epp_max_frame_size: 4096,
+            epp_object_uris: Vec::new(),
+            epp_extension_uris: Vec::new(),
+            tcp_keepalive_idle: Duration::from_secs(1),
+            tcp_keepalive_interval: Duration::from_secs(1),
+            tcp_keepalive_retries: 1,
+        }
+    }
+
+    async fn request(pool: PgPool, method: &str, uri: &str) -> Response {
+        let state = Arc::new(AppState {
+            db: pool,
+            settings: settings(),
+            extension_registry: Arc::new(ExtensionRegistry::empty()),
+        });
+        router(state)
+            .oneshot(
+                Request::builder()
+                    .method(method)
+                    .uri(uri)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+    }
+
+    #[sqlx::test(migrations = "../backend/migrations")]
+    async fn protects_zone_api_and_keeps_unknown_api_as_json_404(pool: PgPool) {
+        let response = request(pool.clone(), "GET", "/api/zones").await;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(response.headers()["x-content-type-options"], "nosniff");
+        assert_eq!(response.headers()["x-frame-options"], "DENY");
+
+        let response = request(pool, "GET", "/api/does-not-exist").await;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert!(response.headers().get("content-type").is_none());
+    }
+}
