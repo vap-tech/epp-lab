@@ -1,4 +1,5 @@
-import { createFileRoute, Outlet } from "@tanstack/react-router"
+import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router"
+import { useEffect } from "react"
 
 import { Footer } from "@/components/Common/Footer"
 import AppSidebar from "@/components/Sidebar/AppSidebar"
@@ -7,12 +8,22 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
+import { useAuth } from "@/hooks/useAuth"
 
 export const Route = createFileRoute("/_layout")({
   component: Layout,
 })
 
 function Layout() {
+  const navigate = useNavigate()
+  const { session } = useAuth()
+  useEffect(() => {
+    if (!session.isLoading && !session.data?.authenticated) {
+      navigate({ to: "/login" })
+    }
+  }, [navigate, session.data?.authenticated, session.isLoading])
+  if (session.isLoading || !session.data?.authenticated) return null
+
   return (
     <SidebarProvider>
       <AppSidebar />

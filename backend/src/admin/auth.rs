@@ -18,7 +18,8 @@ use uuid::Uuid;
 
 use crate::{app::AppState, storage::admin};
 
-const SESSION_COOKIE: &str = "__Host-epp_lab_session";
+const PRODUCTION_SESSION_COOKIE: &str = "__Host-epp_lab_session";
+const DEVELOPMENT_SESSION_COOKIE: &str = "epp_lab_session";
 
 #[derive(Deserialize)]
 pub(crate) struct LoginRequest {
@@ -79,7 +80,11 @@ pub(crate) async fn login(
     )
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let cookie = format!("{SESSION_COOKIE}={token}; Path=/; HttpOnly; SameSite=Strict; Secure");
+    let cookie = format!(
+        "{}={token}; Path=/; HttpOnly; SameSite=Strict{}",
+        session_cookie_name(&state),
+        secure_cookie_suffix(&state),
+    );
     Ok((
         StatusCode::OK,
         [(SET_COOKIE, cookie)],
@@ -98,7 +103,7 @@ pub(crate) async fn session(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<SessionResponse>, StatusCode> {
-    let Some(token) = cookie_value(&headers, SESSION_COOKIE) else {
+    let Some(token) = cookie_value(&headers, session_cookie_name(&state)) else {
         return Ok(Json(SessionResponse {
             authenticated: false,
             user: None,
@@ -132,8 +137,9 @@ pub(crate) async fn session(
 pub(crate) async fn logout(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
+    _csrf: CsrfProtected,
 ) -> Result<([(axum::http::header::HeaderName, String); 1], StatusCode), StatusCode> {
-    if let Some(token) = cookie_value(&headers, SESSION_COOKIE) {
+    if let Some(token) = cookie_value(&headers, session_cookie_name(&state)) {
         admin::revoke(&state.db, &hash(token), Utc::now())
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -141,7 +147,11 @@ pub(crate) async fn logout(
     Ok((
         [(
             SET_COOKIE,
-            format!("{SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict; Secure"),
+            format!(
+                "{}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict{}",
+                session_cookie_name(&state),
+                secure_cookie_suffix(&state),
+            ),
         )],
         StatusCode::NO_CONTENT,
     ))
@@ -160,7 +170,7 @@ impl FromRequestParts<Arc<AppState>> for AdminSession {
         parts: &mut Parts,
         state: &Arc<AppState>,
     ) -> impl Future<Output = Result<Self, Self::Rejection>> + Send {
-        let token = cookie_value(&parts.headers, SESSION_COOKIE).map(str::to_owned);
+        let token = cookie_value(&parts.headers, session_cookie_name(state)).map(str::to_owned);
         let state = Arc::clone(state);
         async move {
             let token = token.ok_or(StatusCode::UNAUTHORIZED)?;
@@ -182,7 +192,7 @@ impl FromRequestParts<Arc<AppState>> for CsrfProtected {
         parts: &mut Parts,
         state: &Arc<AppState>,
     ) -> impl Future<Output = Result<Self, Self::Rejection>> + Send {
-        let token = cookie_value(&parts.headers, SESSION_COOKIE).map(str::to_owned);
+        let token = cookie_value(&parts.headers, session_cookie_name(state)).map(str::to_owned);
         let csrf = parts
             .headers
             .get("X-CSRF-Token")
@@ -207,6 +217,23 @@ impl FromRequestParts<Arc<AppState>> for CsrfProtected {
 fn random_token() -> String {
     hex::encode(Uuid::new_v4().as_bytes()) + &hex::encode(Uuid::new_v4().as_bytes())
 }
+
+fn session_cookie_name(state: &AppState) -> &'static str {
+    if state.settings.app_env == "production" {
+        PRODUCTION_SESSION_COOKIE
+    } else {
+        DEVELOPMENT_SESSION_COOKIE
+    }
+}
+
+fn secure_cookie_suffix(state: &AppState) -> &'static str {
+    if state.settings.app_env == "production" {
+        "; Secure"
+    } else {
+        ""
+    }
+}
+
 fn hash(value: &str) -> String {
     hex::encode(Sha256::digest(value.as_bytes()))
 }
