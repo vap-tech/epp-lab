@@ -239,6 +239,30 @@ pub(crate) async fn update_disclose_flag(
     Ok(())
 }
 
+pub(crate) async fn update_disclosure_fields(
+    pool: &PgPool,
+    id: Uuid,
+    fields: &[&str],
+) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    sqlx::query("DELETE FROM contact_disclosure_fields WHERE contact_id = $1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    for field in fields {
+        sqlx::query("INSERT INTO contact_disclosure_fields (contact_id, field) VALUES ($1, $2)")
+            .bind(id)
+            .bind(field)
+            .execute(&mut *tx)
+            .await?;
+    }
+    sqlx::query("UPDATE contacts SET updated_at = NOW() WHERE id = $1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await
+}
+
 #[allow(dead_code)]
 pub(crate) async fn create_identity(
     pool: &PgPool,

@@ -531,6 +531,32 @@ pub(crate) async fn execute_contact_update(
             .await
             .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?;
     }
+    if !command.chg_disclose_fields.is_empty() {
+        let allowed = ["name", "organization", "address", "voice", "fax", "email"];
+        if command
+            .chg_disclose_fields
+            .iter()
+            .any(|field| !allowed.contains(&field.as_str()))
+        {
+            return super::protocol::send_response(
+                stream,
+                limits,
+                super::protocol::COMMAND_USE_ERROR,
+                "invalid disclose field",
+                cl_trid,
+                sv_trid,
+            )
+            .await;
+        }
+        let fields = command
+            .chg_disclose_fields
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        crate::storage::contact::update_disclosure_fields(db, identity.id, &fields)
+            .await
+            .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?;
+    }
     crate::storage::contact::update_email_auth(
         db,
         identity.id,

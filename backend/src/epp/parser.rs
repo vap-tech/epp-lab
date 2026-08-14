@@ -140,6 +140,7 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
     let mut contact_streets = Vec::new();
     let mut contact_add_statuses = Vec::new();
     let mut contact_rem_statuses = Vec::new();
+    let mut contact_disclose_fields = Vec::new();
     let mut root_seen = false;
     loop {
         match reader.read_event_into(&mut buf) {
@@ -243,6 +244,20 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
             }
             Ok(Event::Empty(event)) => {
                 let name = event.name().as_ref().to_vec();
+                if path.iter().any(|part| part.ends_with(b"disclose")) {
+                    let field = match name.as_slice() {
+                        b"name" => Some("name"),
+                        b"org" => Some("organization"),
+                        b"addr" => Some("address"),
+                        b"voice" => Some("voice"),
+                        b"fax" => Some("fax"),
+                        b"email" => Some("email"),
+                        _ => None,
+                    };
+                    if let Some(field) = field {
+                        contact_disclose_fields.push(field.to_owned());
+                    }
+                }
                 if name.ends_with(b"status")
                     && let Some(status) = event
                         .attributes()
@@ -443,6 +458,7 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                 .remove("disclose")
                 .map(crate::domain::contact::Patch::Set)
                 .unwrap_or_default();
+            update.chg_disclose_fields = contact_disclose_fields;
             if update.add_statuses.is_empty()
                 && update.rem_statuses.is_empty()
                 && update.chg_email.is_unchanged()
