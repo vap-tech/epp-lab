@@ -15,6 +15,7 @@ import { Route as LayoutIndexRouteImport } from './routes/_layout/index'
 import { Route as LayoutRegistrarsRouteImport } from './routes/_layout/registrars'
 import { Route as LayoutSessionsRouteImport } from './routes/_layout/sessions'
 import { Route as LayoutTransactionsRouteImport } from './routes/_layout/transactions'
+import { Route as LayoutZonesRouteImport } from './routes/_layout/zones'
 import { Route as LayoutSessionsSessionIdRouteImport } from './routes/_layout/sessions/$sessionId'
 import { Route as LayoutTransactionsTransactionIdRouteImport } from './routes/_layout/transactions/$transactionId'
 
@@ -47,6 +48,11 @@ const LayoutTransactionsRoute = LayoutTransactionsRouteImport.update({
   path: '/transactions',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutZonesRoute = LayoutZonesRouteImport.update({
+  id: '/zones',
+  path: '/zones',
+  getParentRoute: () => LayoutRoute,
+} as any)
 const LayoutSessionsSessionIdRoute = LayoutSessionsSessionIdRouteImport.update({
   id: '/$sessionId',
   path: '/$sessionId',
@@ -65,6 +71,7 @@ export interface FileRoutesByFullPath {
   '/registrars': typeof LayoutRegistrarsRoute
   '/sessions': typeof LayoutSessionsRouteWithChildren
   '/transactions': typeof LayoutTransactionsRouteWithChildren
+  '/zones': typeof LayoutZonesRoute
   '/sessions/$sessionId': typeof LayoutSessionsSessionIdRoute
   '/transactions/$transactionId': typeof LayoutTransactionsTransactionIdRoute
 }
@@ -73,6 +80,7 @@ export interface FileRoutesByTo {
   '/registrars': typeof LayoutRegistrarsRoute
   '/sessions': typeof LayoutSessionsRouteWithChildren
   '/transactions': typeof LayoutTransactionsRouteWithChildren
+  '/zones': typeof LayoutZonesRoute
   '/': typeof LayoutIndexRoute
   '/sessions/$sessionId': typeof LayoutSessionsSessionIdRoute
   '/transactions/$transactionId': typeof LayoutTransactionsTransactionIdRoute
@@ -84,6 +92,7 @@ export interface FileRoutesById {
   '/_layout/registrars': typeof LayoutRegistrarsRoute
   '/_layout/sessions': typeof LayoutSessionsRouteWithChildren
   '/_layout/transactions': typeof LayoutTransactionsRouteWithChildren
+  '/_layout/zones': typeof LayoutZonesRoute
   '/_layout/': typeof LayoutIndexRoute
   '/_layout/sessions/$sessionId': typeof LayoutSessionsSessionIdRoute
   '/_layout/transactions/$transactionId': typeof LayoutTransactionsTransactionIdRoute
@@ -96,6 +105,7 @@ export interface FileRouteTypes {
     | '/registrars'
     | '/sessions'
     | '/transactions'
+    | '/zones'
     | '/sessions/$sessionId'
     | '/transactions/$transactionId'
   fileRoutesByTo: FileRoutesByTo
@@ -104,6 +114,7 @@ export interface FileRouteTypes {
     | '/registrars'
     | '/sessions'
     | '/transactions'
+    | '/zones'
     | '/'
     | '/sessions/$sessionId'
     | '/transactions/$transactionId'
@@ -114,6 +125,7 @@ export interface FileRouteTypes {
     | '/_layout/registrars'
     | '/_layout/sessions'
     | '/_layout/transactions'
+    | '/_layout/zones'
     | '/_layout/'
     | '/_layout/sessions/$sessionId'
     | '/_layout/transactions/$transactionId'
@@ -168,6 +180,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutTransactionsRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/zones': {
+      id: '/_layout/zones'
+      path: '/zones'
+      fullPath: '/zones'
+      preLoaderRoute: typeof LayoutZonesRouteImport
+      parentRoute: typeof LayoutRoute
+    }
     '/_layout/sessions/$sessionId': {
       id: '/_layout/sessions/$sessionId'
       path: '/$sessionId'
@@ -212,6 +231,7 @@ interface LayoutRouteChildren {
   LayoutRegistrarsRoute: typeof LayoutRegistrarsRoute
   LayoutSessionsRoute: typeof LayoutSessionsRouteWithChildren
   LayoutTransactionsRoute: typeof LayoutTransactionsRouteWithChildren
+  LayoutZonesRoute: typeof LayoutZonesRoute
   LayoutIndexRoute: typeof LayoutIndexRoute
 }
 
@@ -219,6 +239,7 @@ const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutRegistrarsRoute: LayoutRegistrarsRoute,
   LayoutSessionsRoute: LayoutSessionsRouteWithChildren,
   LayoutTransactionsRoute: LayoutTransactionsRouteWithChildren,
+  LayoutZonesRoute: LayoutZonesRoute,
   LayoutIndexRoute: LayoutIndexRoute,
 }
 

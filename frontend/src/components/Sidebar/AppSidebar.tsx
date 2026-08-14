@@ -4,6 +4,7 @@ import {
   ClipboardList,
   Gauge,
   LogOut,
+  Network,
   Users,
 } from "lucide-react"
 
@@ -25,6 +26,7 @@ const baseItems: Item[] = [
   { icon: Users, title: "Registrars", path: "/registrars" },
   { icon: ArrowRightLeft, title: "EPP Sessions", path: "/sessions" },
   { icon: ClipboardList, title: "EPP Transactions", path: "/transactions" },
+  { icon: Network, title: "Zones", path: "/zones" },
 ]
 
 export function AppSidebar() {

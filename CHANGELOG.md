@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Added the authenticated Zones frontend list and sidebar navigation backed by
+  the real Zone API.
 - Added authenticated extension catalog and zone assignment endpoints; the
   production catalog is currently empty and unknown extensions are rejected.
 - Added CSRF-protected contact policy updates at
