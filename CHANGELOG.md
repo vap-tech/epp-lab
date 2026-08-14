@@ -21,6 +21,8 @@
 - Added protocol-level Contact command recognition for check/create/info/update/
   delete; execution remains explicitly unsupported until application commands
   are implemented.
+- Added Contact check command parsing with namespace-aware IDs and malformed
+  empty-check rejection.
 - Added the initial RFC 5733 Contact domain foundation with validated
   identities, postal data, phone/email values, statuses and disclosure types.
 - Added PostgreSQL-backed Admin API integration tests and a dedicated test

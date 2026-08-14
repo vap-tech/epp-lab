@@ -15,11 +15,16 @@ pub(crate) enum EppCommand {
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum ContactCommand {
-    Check,
+    Check(ContactCheckCommand),
     Create,
     Info,
     Update,
     Delete,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct ContactCheckCommand {
+    pub ids: Vec<String>,
 }
 
 impl EppCommand {
@@ -28,7 +33,7 @@ impl EppCommand {
             Self::Hello => "hello",
             Self::Login(_) => "login",
             Self::Logout => "logout",
-            Self::Contact(ContactCommand::Check) => "contact:check",
+            Self::Contact(ContactCommand::Check(_)) => "contact:check",
             Self::Contact(ContactCommand::Create) => "contact:create",
             Self::Contact(ContactCommand::Info) => "contact:info",
             Self::Contact(ContactCommand::Update) => "contact:update",
@@ -81,6 +86,7 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
     let mut cl_trid = None;
     let mut object_uris = Vec::new();
     let mut extension_uris = Vec::new();
+    let mut contact_ids = Vec::new();
     let mut root_seen = false;
     loop {
         match reader.read_event_into(&mut buf) {
@@ -116,7 +122,9 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                     }));
                 }
                 if name.ends_with(b"check") {
-                    command = Some(EppCommand::Contact(ContactCommand::Check));
+                    command = Some(EppCommand::Contact(ContactCommand::Check(
+                        ContactCheckCommand { ids: Vec::new() },
+                    )));
                 } else if name.ends_with(b"create") {
                     command = Some(EppCommand::Contact(ContactCommand::Create));
                 } else if name.ends_with(b"info") {
@@ -147,6 +155,7 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                     Some(name) if name.ends_with(b"clTRID") => cl_trid = Some(value),
                     Some(name) if name.ends_with(b"objURI") => object_uris.push(value),
                     Some(name) if name.ends_with(b"extURI") => extension_uris.push(value),
+                    Some(name) if name.ends_with(b"id") => contact_ids.push(value),
                     _ => {}
                 }
             }
@@ -176,6 +185,17 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
             login.extension_uris = extension_uris;
             Ok(ParsedCommand {
                 command: EppCommand::Login(login),
+                cl_trid,
+            })
+        }
+        Some(EppCommand::Contact(ContactCommand::Check(_))) => {
+            if contact_ids.is_empty() {
+                return Err(ParseError::Command);
+            }
+            Ok(ParsedCommand {
+                command: EppCommand::Contact(ContactCommand::Check(ContactCheckCommand {
+                    ids: contact_ids,
+                })),
                 cl_trid,
             })
         }
@@ -279,6 +299,20 @@ mod tests {
         )
         .unwrap();
         assert_eq!(parsed.name(), "contact:create");
+    }
+
+    #[test]
+    fn parses_contact_check_ids() {
+        let parsed = parse_command(
+            br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><check><contact:check xmlns:contact="urn:ietf:params:xml:ns:contact-1.0"><contact:id>C123</contact:id><contact:id>C456</contact:id></contact:check></check></command></epp>"#,
+        )
+        .unwrap();
+        assert_eq!(
+            parsed.command,
+            EppCommand::Contact(ContactCommand::Check(ContactCheckCommand {
+                ids: vec!["C123".into(), "C456".into()]
+            }))
+        );
     }
 
     #[test]
