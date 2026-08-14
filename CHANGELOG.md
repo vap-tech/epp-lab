@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Added the immutable Stage 3 database migration for zones, contact usage
+  policies and zone extension assignments with explicit constraints.
 - Added the Stage 3 implementation plan and the synchronous Zone domain
   foundation with IDNA names, contact usage policy and suffix resolution.
 - Refined XML viewer controls with shared switch-style Raw/Wrap display state,
