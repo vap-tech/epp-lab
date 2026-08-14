@@ -10,6 +10,16 @@ pub(crate) enum EppCommand {
     Hello,
     Login(LoginCommand),
     Logout,
+    Contact(ContactCommand),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum ContactCommand {
+    Check,
+    Create,
+    Info,
+    Update,
+    Delete,
 }
 
 impl EppCommand {
@@ -18,6 +28,11 @@ impl EppCommand {
             Self::Hello => "hello",
             Self::Login(_) => "login",
             Self::Logout => "logout",
+            Self::Contact(ContactCommand::Check) => "contact:check",
+            Self::Contact(ContactCommand::Create) => "contact:create",
+            Self::Contact(ContactCommand::Info) => "contact:info",
+            Self::Contact(ContactCommand::Update) => "contact:update",
+            Self::Contact(ContactCommand::Delete) => "contact:delete",
         }
     }
 }
@@ -100,6 +115,17 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                         extension_uris: Vec::new(),
                     }));
                 }
+                if name.ends_with(b"check") {
+                    command = Some(EppCommand::Contact(ContactCommand::Check));
+                } else if name.ends_with(b"create") {
+                    command = Some(EppCommand::Contact(ContactCommand::Create));
+                } else if name.ends_with(b"info") {
+                    command = Some(EppCommand::Contact(ContactCommand::Info));
+                } else if name.ends_with(b"update") {
+                    command = Some(EppCommand::Contact(ContactCommand::Update));
+                } else if name.ends_with(b"delete") {
+                    command = Some(EppCommand::Contact(ContactCommand::Delete));
+                }
                 path.push(name);
             }
             Ok(Event::Empty(event)) => {
@@ -153,6 +179,10 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                 cl_trid,
             })
         }
+        Some(EppCommand::Contact(contact)) => Ok(ParsedCommand {
+            command: EppCommand::Contact(contact),
+            cl_trid,
+        }),
         None if xml.windows(9).any(|window| window == b"<command>") => Err(ParseError::Unsupported),
         None => Err(ParseError::Command),
     }
@@ -240,6 +270,15 @@ mod tests {
             parse_command(br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><logout/></command></epp>"#).unwrap(),
             ParsedCommand { command: EppCommand::Logout, cl_trid: None }
         );
+    }
+
+    #[test]
+    fn recognizes_contact_commands_without_implementing_business_logic() {
+        let parsed = parse_command(
+            br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><create xmlns:contact="urn:ietf:params:xml:ns:contact-1.0"><contact:create/></create></command></epp>"#,
+        )
+        .unwrap();
+        assert_eq!(parsed.name(), "contact:create");
     }
 
     #[test]

@@ -235,6 +235,20 @@ async fn handle_connection(
                         response = Some(logout.response);
                         should_close = true;
                     }
+                    crate::epp::parser::EppCommand::Contact(_) => {
+                        response = Some(
+                            crate::epp::dispatch::execute_parse_error(
+                                &mut stream,
+                                &limits,
+                                &db,
+                                transaction_id,
+                                &crate::epp::parser::ParseError::Unsupported,
+                                cl_trid.as_deref(),
+                                &sv_trid,
+                            )
+                            .await?,
+                        );
+                    }
                 },
                 Err(error) => {
                     response = Some(
