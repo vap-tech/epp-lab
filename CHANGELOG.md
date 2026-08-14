@@ -8,6 +8,8 @@
   stored status rows at the EPP and Admin read boundaries.
 - Added EPP `2304` enforcement for Contact update/delete operations blocked by
   `clientUpdateProhibited` or `clientDeleteProhibited`.
+- Added the Contact association lookup boundary and reserved the correct EPP
+  `2305` path for future active Domain/Host references.
 - Completed optional Contact update clearing for fax, organization,
   state/province and postal code; empty XML elements now become SQL `NULL`.
 - Added PostgreSQL coverage for both atomic Contact update rollback and

@@ -310,6 +310,21 @@ pub(crate) async fn execute_contact_delete(
         )
         .await;
     }
+    let associations = crate::application::NoContactAssociations;
+    if crate::application::ContactAssociationLookup::has_active_links(&associations, identity.id)
+        .await
+        .unwrap_or(false)
+    {
+        return super::protocol::send_response(
+            stream,
+            limits,
+            2305,
+            "object association prohibits operation",
+            cl_trid,
+            sv_trid,
+        )
+        .await;
+    }
     match crate::storage::contact::delete(db, identity.id).await {
         Ok(true) => super::protocol::send_contact_delete(stream, limits, cl_trid, sv_trid).await,
         Ok(false) => {

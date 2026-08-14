@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{convert::Infallible, sync::Arc};
 
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
@@ -106,6 +106,22 @@ pub(crate) fn effective_contact_statuses(persisted: &[String], linked: bool) -> 
         .map(crate::domain::contact::ContactStatus::as_str)
         .map(str::to_owned)
         .collect()
+}
+
+/// Application boundary for checking whether another registry aggregate owns a
+/// live reference to a Contact. Stage 4 has no such aggregate yet, so the
+/// concrete lookup is deliberately explicit rather than backed by a fictitious
+/// table. A future domain/host repository can replace this implementation.
+pub(crate) trait ContactAssociationLookup {
+    async fn has_active_links(&self, contact_id: uuid::Uuid) -> Result<bool, Infallible>;
+}
+
+pub(crate) struct NoContactAssociations;
+
+impl ContactAssociationLookup for NoContactAssociations {
+    async fn has_active_links(&self, _contact_id: uuid::Uuid) -> Result<bool, Infallible> {
+        Ok(false)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -271,6 +287,16 @@ mod tests {
             !contact
                 .server_statuses
                 .contains(&crate::domain::contact::ContactStatus::PendingCreate)
+        );
+    }
+
+    #[tokio::test]
+    async fn contact_association_boundary_is_honest_without_linkable_objects() {
+        let lookup = NoContactAssociations;
+        assert!(
+            !ContactAssociationLookup::has_active_links(&lookup, uuid::Uuid::new_v4())
+                .await
+                .unwrap()
         );
     }
 }
