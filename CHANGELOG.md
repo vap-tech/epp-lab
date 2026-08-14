@@ -4,6 +4,9 @@
 
 ### Changed
 
+- Connected EPP greeting and login service negotiation to the active Zone
+  extension assignments through an application-level capability boundary,
+  while retaining configured extension URIs as a compatibility fallback.
 - Connected the Zone Extensions section to the real extension catalog and
   assignment APIs, with an honest empty production registry state.
 - Added Zone detail UI with General status, Contact Usage policy controls and

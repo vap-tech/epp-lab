@@ -1,5 +1,6 @@
 mod admin;
 mod app;
+mod application;
 mod config;
 pub mod domain;
 pub mod epp;
@@ -51,6 +52,7 @@ async fn main() -> anyhow::Result<()> {
         },
         tls_acceptor,
         state.db.clone(),
+        state.extension_registry.clone(),
         shutdown_rx,
     ));
     tracing::info!(address = %settings.admin_bind, "admin HTTPS API listening");

@@ -1,6 +1,7 @@
 use std::{
     io,
     net::SocketAddr,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -33,6 +34,7 @@ pub async fn run(
     settings: TcpSettings,
     acceptor: TlsAcceptor,
     db: PgPool,
+    extension_registry: Arc<crate::domain::extension::ExtensionRegistry>,
     mut shutdown: watch::Receiver<bool>,
 ) -> io::Result<()> {
     let listener = TcpListener::bind(settings.bind).await?;
@@ -50,9 +52,10 @@ pub async fn run(
                 let extension_uris = settings.extension_uris.clone();
                 let acceptor = acceptor.clone();
                 let db = db.clone();
+                let extension_registry = extension_registry.clone();
                 let connection_shutdown = shutdown.clone();
                 tokio::spawn(async move {
-                    if let Err(error) = handle_connection(stream, remote_addr, limits, tls_handshake_timeout, idle_timeout, object_uris, extension_uris, acceptor, db, connection_shutdown).await {
+                    if let Err(error) = handle_connection(stream, remote_addr, limits, tls_handshake_timeout, idle_timeout, object_uris, extension_uris, extension_registry, acceptor, db, connection_shutdown).await {
                         tracing::debug!(%remote_addr, %error, "EPP connection closed");
                     }
                 });
@@ -83,6 +86,7 @@ async fn handle_connection(
     idle_timeout: Option<Duration>,
     object_uris: Vec<String>,
     extension_uris: Vec<String>,
+    extension_registry: Arc<crate::domain::extension::ExtensionRegistry>,
     acceptor: TlsAcceptor,
     db: PgPool,
     mut shutdown: watch::Receiver<bool>,
@@ -93,6 +97,19 @@ async fn handle_connection(
             .await
             .map_err(|_| super::framing::FrameError::Timeout)?
             .map_err(|error| super::framing::FrameError::Tls(io::Error::other(error)))?;
+    let extension_uris = match crate::application::advertised_extension_uris(
+        &db,
+        &extension_registry,
+    )
+    .await
+    {
+        Ok(uris) if !uris.is_empty() || extension_registry.list().next().is_some() => uris,
+        Ok(_) => extension_uris,
+        Err(error) => {
+            tracing::warn!(%error, "failed to calculate zone extension capabilities; using configured EPP extensions");
+            extension_uris
+        }
+    };
     let peer_certificate = stream
         .get_ref()
         .1
