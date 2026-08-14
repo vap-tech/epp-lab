@@ -354,6 +354,47 @@ pub(crate) async fn execute_contact_update(
         )
         .await;
     }
+    if command
+        .add_statuses
+        .iter()
+        .any(|status| command.rem_statuses.contains(status))
+    {
+        return super::protocol::send_response(
+            stream,
+            limits,
+            super::protocol::COMMAND_USE_ERROR,
+            "status cannot be added and removed in the same command",
+            cl_trid,
+            sv_trid,
+        )
+        .await;
+    }
+    if let crate::domain::contact::Patch::Set(email) = &command.chg_email
+        && crate::domain::contact::EmailAddress::parse(email).is_err()
+    {
+        return super::protocol::send_response(
+            stream,
+            limits,
+            super::protocol::COMMAND_USE_ERROR,
+            "invalid email address",
+            cl_trid,
+            sv_trid,
+        )
+        .await;
+    }
+    if let crate::domain::contact::Patch::Set(auth_info) = &command.chg_auth_info
+        && auth_info.is_empty()
+    {
+        return super::protocol::send_response(
+            stream,
+            limits,
+            super::protocol::COMMAND_USE_ERROR,
+            "authInfo cannot be empty",
+            cl_trid,
+            sv_trid,
+        )
+        .await;
+    }
     let Some(identity) = crate::storage::contact::find_identity_by_roid(db, &command.id)
         .await
         .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?
