@@ -68,7 +68,7 @@ function ZoneDetail() {
       </div>
       <section className="rounded-lg border p-6">
         <h2 className="font-semibold">Contact Usage</h2>
-        <div className="mt-4 flex max-w-xl flex-col gap-3">
+        <div className="mt-4 flex max-w-md flex-col gap-3">
           <PolicySelect
             label="Registrant"
             value={zone.contact_policy.registrant}
@@ -141,7 +141,7 @@ function PolicySelect({
   onChange: (value: Requirement) => void
 }) {
   return (
-    <div className="flex items-center justify-between gap-4">
+    <div className="grid grid-cols-[180px_160px] items-center gap-4">
       <span className="text-sm">{label}</span>
       <Select
         value={value}
