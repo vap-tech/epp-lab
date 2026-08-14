@@ -420,21 +420,6 @@ pub(crate) async fn execute_contact_update(
         )
         .await;
     }
-    if !command.add_statuses.is_empty() || !command.rem_statuses.is_empty() {
-        let add = command
-            .add_statuses
-            .iter()
-            .map(String::as_str)
-            .collect::<Vec<_>>();
-        let remove = command
-            .rem_statuses
-            .iter()
-            .map(String::as_str)
-            .collect::<Vec<_>>();
-        crate::storage::contact::update_client_statuses(db, identity.id, &add, &remove)
-            .await
-            .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?;
-    }
     let auth = match &command.chg_auth_info {
         crate::domain::contact::Patch::Set(value) => {
             let Some(cipher) = cipher else {
@@ -488,31 +473,8 @@ pub(crate) async fn execute_contact_update(
         crate::domain::contact::Patch::Set(value) => Some(value.as_str()),
         _ => None,
     };
-    if city.is_some()
-        || state_province.is_some()
-        || postal_code.is_some()
-        || country_code.is_some()
-        || !command.chg_streets.is_empty()
-    {
-        let streets = command
-            .chg_streets
-            .iter()
-            .map(String::as_str)
-            .collect::<Vec<_>>();
-        crate::storage::contact::update_postal_info(
-            db,
-            identity.id,
-            city,
-            state_province,
-            postal_code,
-            country_code,
-            &streets,
-        )
-        .await
-        .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?;
-    }
-    if let crate::domain::contact::Patch::Set(flag) = &command.chg_disclose {
-        let value = match flag.as_str() {
+    let disclose_flag = match &command.chg_disclose {
+        crate::domain::contact::Patch::Set(flag) => Some(match flag.as_str() {
             "0" => "private",
             "1" => "public",
             _ => {
@@ -526,12 +488,12 @@ pub(crate) async fn execute_contact_update(
                 )
                 .await;
             }
-        };
-        crate::storage::contact::update_disclose_flag(db, identity.id, value)
-            .await
-            .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?;
-    }
-    if !command.chg_disclose_fields.is_empty() {
+        }),
+        _ => None,
+    };
+    let disclosure_fields = if command.chg_disclose_fields.is_empty() {
+        None
+    } else {
         let allowed = ["name", "organization", "address", "voice", "fax", "email"];
         if command
             .chg_disclose_fields
@@ -548,23 +510,48 @@ pub(crate) async fn execute_contact_update(
             )
             .await;
         }
-        let fields = command
-            .chg_disclose_fields
-            .iter()
-            .map(String::as_str)
-            .collect::<Vec<_>>();
-        crate::storage::contact::update_disclosure_fields(db, identity.id, &fields)
-            .await
-            .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?;
-    }
-    crate::storage::contact::update_email_auth(
+        Some(
+            command
+                .chg_disclose_fields
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+        )
+    };
+    let streets = command
+        .chg_streets
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    let add_statuses = command
+        .add_statuses
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    let remove_statuses = command
+        .rem_statuses
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    crate::storage::contact::apply_update(
         db,
-        identity.id,
-        email,
-        auth.as_deref(),
-        voice,
-        fax,
-        organization,
+        crate::storage::contact::ContactUpdate {
+            id: identity.id,
+            auth_info_ciphertext: auth.as_deref(),
+            email,
+            voice,
+            fax,
+            organization,
+            city,
+            state_province,
+            postal_code,
+            country_code,
+            streets: &streets,
+            add_statuses: &add_statuses,
+            remove_statuses: &remove_statuses,
+            disclose_flag,
+            disclosure_fields: disclosure_fields.as_deref(),
+        },
     )
     .await
     .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?;

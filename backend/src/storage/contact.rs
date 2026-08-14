@@ -144,123 +144,112 @@ pub(crate) async fn delete(pool: &PgPool, id: Uuid) -> Result<bool, sqlx::Error>
     Ok(result.rows_affected() == 1)
 }
 
-pub(crate) async fn update_email_auth(
+pub(crate) struct ContactUpdate<'a> {
+    pub id: Uuid,
+    pub auth_info_ciphertext: Option<&'a str>,
+    pub email: Option<&'a str>,
+    pub voice: Option<&'a str>,
+    pub fax: Option<&'a str>,
+    pub organization: Option<&'a str>,
+    pub city: Option<&'a str>,
+    pub state_province: Option<&'a str>,
+    pub postal_code: Option<&'a str>,
+    pub country_code: Option<&'a str>,
+    pub streets: &'a [&'a str],
+    pub add_statuses: &'a [&'a str],
+    pub remove_statuses: &'a [&'a str],
+    pub disclose_flag: Option<&'a str>,
+    pub disclosure_fields: Option<&'a [&'a str]>,
+}
+
+pub(crate) async fn apply_update(
     pool: &PgPool,
-    id: Uuid,
-    email: Option<&str>,
-    auth_info_ciphertext: Option<&str>,
-    voice: Option<&str>,
-    fax: Option<&str>,
-    organization: Option<&str>,
+    update: ContactUpdate<'_>,
 ) -> Result<bool, sqlx::Error> {
     let mut tx = pool.begin().await?;
-    let result = sqlx::query(
-        "UPDATE contacts c SET auth_info_ciphertext = COALESCE($2, c.auth_info_ciphertext), updated_at = NOW() WHERE c.id = $1",
-    )
-    .bind(id)
-    .bind(auth_info_ciphertext)
-    .execute(&mut *tx)
-    .await?;
+    let result = sqlx::query("UPDATE contacts SET auth_info_ciphertext = COALESCE($2, auth_info_ciphertext), disclose_flag = COALESCE($3, disclose_flag), updated_at = NOW() WHERE id = $1")
+        .bind(update.id)
+        .bind(update.auth_info_ciphertext)
+        .bind(update.disclose_flag)
+        .execute(&mut *tx)
+        .await?;
     if result.rows_affected() == 0 {
         return Ok(false);
     }
-    if email.is_some() || voice.is_some() || fax.is_some() {
-        sqlx::query("UPDATE contact_phones SET email = COALESCE($2, email), voice = COALESCE($3, voice), fax = COALESCE($4, fax) WHERE contact_id = $1")
-            .bind(id).bind(email).bind(voice).bind(fax).execute(&mut *tx).await?;
-    }
-    if let Some(organization) = organization {
-        sqlx::query("UPDATE contact_postal_info SET organization = $2 WHERE contact_id = $1 AND info_type = 'international'")
-            .bind(id).bind(organization).execute(&mut *tx).await?;
-    }
-    tx.commit().await?;
-    Ok(true)
-}
-
-pub(crate) async fn update_client_statuses(
-    pool: &PgPool,
-    id: Uuid,
-    add: &[&str],
-    remove: &[&str],
-) -> Result<(), sqlx::Error> {
-    let mut tx = pool.begin().await?;
-    for status in remove {
-        sqlx::query("DELETE FROM contact_statuses WHERE contact_id = $1 AND status = $2 AND source = 'client'")
-            .bind(id).bind(status).execute(&mut *tx).await?;
-    }
-    for status in add {
-        sqlx::query("INSERT INTO contact_statuses (contact_id, status, source) VALUES ($1, $2, 'client') ON CONFLICT DO NOTHING")
-            .bind(id).bind(status).execute(&mut *tx).await?;
-    }
-    sqlx::query("UPDATE contacts SET updated_at = NOW() WHERE id = $1")
-        .bind(id)
-        .execute(&mut *tx)
-        .await?;
-    tx.commit().await
-}
-
-pub(crate) async fn update_postal_info(
-    pool: &PgPool,
-    id: Uuid,
-    city: Option<&str>,
-    state_province: Option<&str>,
-    postal_code: Option<&str>,
-    country_code: Option<&str>,
-    streets: &[&str],
-) -> Result<(), sqlx::Error> {
-    let mut tx = pool.begin().await?;
-    sqlx::query("UPDATE contact_postal_info SET city = COALESCE($2, city), state_province = COALESCE($3, state_province), postal_code = COALESCE($4, postal_code), country_code = COALESCE($5, country_code) WHERE contact_id = $1 AND info_type = 'international'")
-        .bind(id).bind(city).bind(state_province).bind(postal_code).bind(country_code)
-        .execute(&mut *tx).await?;
-    if !streets.is_empty() {
-        sqlx::query("DELETE FROM contact_postal_streets WHERE contact_id = $1 AND info_type = 'international'")
-            .bind(id).execute(&mut *tx).await?;
-        for (position, street) in streets.iter().enumerate() {
-            sqlx::query("INSERT INTO contact_postal_streets (contact_id, info_type, position, street) VALUES ($1, 'international', $2, $3)")
-                .bind(id).bind((position + 1) as i16).bind(street).execute(&mut *tx).await?;
-        }
-    }
-    sqlx::query("UPDATE contacts SET updated_at = NOW() WHERE id = $1")
-        .bind(id)
-        .execute(&mut *tx)
-        .await?;
-    tx.commit().await
-}
-
-pub(crate) async fn update_disclose_flag(
-    pool: &PgPool,
-    id: Uuid,
-    flag: &str,
-) -> Result<(), sqlx::Error> {
-    sqlx::query("UPDATE contacts SET disclose_flag = $2, updated_at = NOW() WHERE id = $1")
-        .bind(id)
-        .bind(flag)
-        .execute(pool)
-        .await?;
-    Ok(())
-}
-
-pub(crate) async fn update_disclosure_fields(
-    pool: &PgPool,
-    id: Uuid,
-    fields: &[&str],
-) -> Result<(), sqlx::Error> {
-    let mut tx = pool.begin().await?;
-    sqlx::query("DELETE FROM contact_disclosure_fields WHERE contact_id = $1")
-        .bind(id)
-        .execute(&mut *tx)
-        .await?;
-    for field in fields {
-        sqlx::query("INSERT INTO contact_disclosure_fields (contact_id, field) VALUES ($1, $2)")
-            .bind(id)
-            .bind(field)
+    if update.email.is_some() || update.voice.is_some() || update.fax.is_some() {
+        sqlx::query("UPDATE contact_phones SET email=COALESCE($2,email), voice=COALESCE($3,voice), fax=COALESCE($4,fax) WHERE contact_id=$1")
+            .bind(update.id)
+            .bind(update.email)
+            .bind(update.voice)
+            .bind(update.fax)
             .execute(&mut *tx)
             .await?;
     }
-    sqlx::query("UPDATE contacts SET updated_at = NOW() WHERE id = $1")
-        .bind(id)
+    if update.organization.is_some()
+        || update.city.is_some()
+        || update.state_province.is_some()
+        || update.postal_code.is_some()
+        || update.country_code.is_some()
+    {
+        sqlx::query("UPDATE contact_postal_info SET organization=COALESCE($2,organization), city=COALESCE($3,city), state_province=COALESCE($4,state_province), postal_code=COALESCE($5,postal_code), country_code=COALESCE($6,country_code) WHERE contact_id=$1 AND info_type='international'")
+            .bind(update.id)
+            .bind(update.organization)
+            .bind(update.city)
+            .bind(update.state_province)
+            .bind(update.postal_code)
+            .bind(update.country_code)
+            .execute(&mut *tx)
+            .await?;
+    }
+    if !update.streets.is_empty() {
+        sqlx::query(
+            "DELETE FROM contact_postal_streets WHERE contact_id = $1 AND info_type = 'international'",
+        )
+        .bind(update.id)
         .execute(&mut *tx)
         .await?;
-    tx.commit().await
+        for (position, street) in update.streets.iter().enumerate() {
+            sqlx::query("INSERT INTO contact_postal_streets (contact_id, info_type, position, street) VALUES ($1, 'international', $2, $3)")
+                .bind(update.id)
+                .bind((position + 1) as i16)
+                .bind(street)
+                .execute(&mut *tx)
+                .await?;
+        }
+    }
+    for status in update.remove_statuses {
+        sqlx::query(
+            "DELETE FROM contact_statuses WHERE contact_id = $1 AND status = $2 AND source = 'client'",
+        )
+        .bind(update.id)
+        .bind(status)
+        .execute(&mut *tx)
+        .await?;
+    }
+    for status in update.add_statuses {
+        sqlx::query("INSERT INTO contact_statuses (contact_id, status, source) VALUES ($1, $2, 'client') ON CONFLICT DO NOTHING")
+            .bind(update.id)
+            .bind(status)
+            .execute(&mut *tx)
+            .await?;
+    }
+    if let Some(fields) = update.disclosure_fields {
+        sqlx::query("DELETE FROM contact_disclosure_fields WHERE contact_id = $1")
+            .bind(update.id)
+            .execute(&mut *tx)
+            .await?;
+        for field in fields {
+            sqlx::query(
+                "INSERT INTO contact_disclosure_fields (contact_id, field) VALUES ($1, $2)",
+            )
+            .bind(update.id)
+            .bind(field)
+            .execute(&mut *tx)
+            .await?;
+        }
+    }
+    tx.commit().await?;
+    Ok(true)
 }
 
 #[allow(dead_code)]
@@ -395,6 +384,51 @@ mod tests {
 
     use super::*;
 
+    async fn insert_test_contact(pool: &PgPool) -> (Uuid, Uuid) {
+        let registrar_id = Uuid::new_v4();
+        let contact_id = Uuid::new_v4();
+        let now = Utc::now();
+        sqlx::query(
+            "INSERT INTO registrars (id, handle, name, client_id, password_hash, status, created_at, updated_at) VALUES ($1, 'REG-1', 'Registrar', 'client-1', 'not-used', 'active', $2, $2)",
+        )
+        .bind(registrar_id)
+        .bind(now)
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO contacts (id, roid, sponsoring_registrar_id, created_by, created_at, updated_by, updated_at, auth_info_ciphertext, disclose_flag) VALUES ($1, 'SH8013-EXAMPLE', $2, $2, $3, $2, $3, 'old-ciphertext', 'private')",
+        )
+        .bind(contact_id)
+        .bind(registrar_id)
+        .bind(now)
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO contact_postal_info (contact_id, info_type, name, city, country_code) VALUES ($1, 'international', 'Jane Doe', 'Moscow', 'RU')",
+        )
+        .bind(contact_id)
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO contact_phones (contact_id, voice, email) VALUES ($1, '+7.4951234567', 'old@example.test')",
+        )
+        .bind(contact_id)
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO contact_disclosure_fields (contact_id, field) VALUES ($1, 'email')",
+        )
+        .bind(contact_id)
+        .execute(pool)
+        .await
+        .unwrap();
+        (registrar_id, contact_id)
+    }
+
     #[ignore = "requires PostgreSQL; run through just test-with-db"]
     #[sqlx::test(migrations = "../backend/migrations")]
     async fn stores_and_reads_contact_identity_ciphertext(pool: PgPool) {
@@ -430,5 +464,70 @@ mod tests {
         assert!(exists(&pool, row.id).await.unwrap());
         assert!(exists_by_roid(&pool, &row.roid).await.unwrap());
         assert!(!exists_by_roid(&pool, "SH404-NOT-FOUND").await.unwrap());
+    }
+
+    #[ignore = "requires PostgreSQL; run through just test-with-db"]
+    #[sqlx::test(migrations = "../backend/migrations")]
+    async fn update_is_atomic_when_a_late_statement_fails(pool: PgPool) {
+        let (_, contact_id) = insert_test_contact(&pool).await;
+        let streets = ["New street"];
+        let statuses = ["clientUpdateProhibited"];
+        let fields = ["invalid"];
+
+        let error = apply_update(
+            &pool,
+            ContactUpdate {
+                id: contact_id,
+                auth_info_ciphertext: Some("new-ciphertext"),
+                email: Some("new@example.test"),
+                voice: None,
+                fax: None,
+                organization: None,
+                city: None,
+                state_province: None,
+                postal_code: None,
+                country_code: None,
+                streets: &streets,
+                add_statuses: &statuses,
+                remove_statuses: &[],
+                disclose_flag: Some("public"),
+                disclosure_fields: Some(&fields),
+            },
+        )
+        .await
+        .unwrap_err();
+        assert!(error.as_database_error().is_some());
+
+        let auth_info: String =
+            sqlx::query_scalar("SELECT auth_info_ciphertext FROM contacts WHERE id = $1")
+                .bind(contact_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let email: String =
+            sqlx::query_scalar("SELECT email FROM contact_phones WHERE contact_id = $1")
+                .bind(contact_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let fields: Vec<String> = sqlx::query_scalar(
+            "SELECT field FROM contact_disclosure_fields WHERE contact_id = $1 ORDER BY field",
+        )
+        .bind(contact_id)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        let status_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM contact_statuses WHERE contact_id = $1 AND status = 'clientUpdateProhibited'",
+        )
+        .bind(contact_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        assert_eq!(auth_info, "old-ciphertext");
+        assert_eq!(email, "old@example.test");
+        assert_eq!(fields, ["email"]);
+        assert_eq!(status_count, 0);
     }
 }
