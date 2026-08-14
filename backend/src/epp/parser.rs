@@ -128,11 +128,26 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
     let mut contact_ids = Vec::new();
     let mut contact_create_values = std::collections::BTreeMap::new();
     let mut contact_streets = Vec::new();
+    let mut contact_add_statuses = Vec::new();
+    let mut contact_rem_statuses = Vec::new();
     let mut root_seen = false;
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(event)) => {
                 let name = event.name().as_ref().to_vec();
+                if name.ends_with(b"status")
+                    && let Some(status) = event
+                        .attributes()
+                        .flatten()
+                        .find(|attribute| attribute.key.as_ref() == b"s")
+                        .and_then(|attribute| attribute.unescape_value().ok())
+                {
+                    if path.iter().any(|part| part.ends_with(b"add")) {
+                        contact_add_statuses.push(status.into_owned());
+                    } else if path.iter().any(|part| part.ends_with(b"rem")) {
+                        contact_rem_statuses.push(status.into_owned());
+                    }
+                }
                 if !root_seen {
                     root_seen = true;
                     if name != b"epp"
@@ -343,6 +358,8 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
         }
         Some(EppCommand::Contact(ContactCommand::Update(mut update))) => {
             update.id = contact_ids.first().cloned().ok_or(ParseError::Command)?;
+            update.add_statuses = contact_add_statuses;
+            update.rem_statuses = contact_rem_statuses;
             update.chg_email = contact_create_values
                 .remove("email")
                 .map(crate::domain::contact::Patch::Set)
@@ -351,7 +368,11 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                 .remove("pw")
                 .map(crate::domain::contact::Patch::Set)
                 .unwrap_or_default();
-            if update.chg_email.is_unchanged() && update.chg_auth_info.is_unchanged() {
+            if update.add_statuses.is_empty()
+                && update.rem_statuses.is_empty()
+                && update.chg_email.is_unchanged()
+                && update.chg_auth_info.is_unchanged()
+            {
                 return Err(ParseError::Command);
             }
             Ok(ParsedCommand {

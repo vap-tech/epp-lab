@@ -332,6 +332,17 @@ pub(crate) async fn execute_contact_update(
     cl_trid: Option<&str>,
     sv_trid: &str,
 ) -> Result<super::protocol::Response, super::framing::FrameError> {
+    if !command.add_statuses.is_empty() || !command.rem_statuses.is_empty() {
+        return super::protocol::send_response(
+            stream,
+            limits,
+            super::protocol::COMMAND_NOT_SUPPORTED,
+            "status updates are not implemented yet",
+            cl_trid,
+            sv_trid,
+        )
+        .await;
+    }
     let Some(identity) = crate::storage::contact::find_identity_by_roid(db, &command.id)
         .await
         .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?
