@@ -8,7 +8,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::{app::AppState, storage::registrar};
+use crate::{admin::auth::AdminSession, app::AppState, storage::registrar};
 
 #[derive(Deserialize)]
 pub(crate) struct CreateRegistrarRequest {
@@ -40,6 +40,7 @@ impl From<registrar::RegistrarRow> for RegistrarResponse {
 }
 
 pub(crate) async fn list(
+    _session: AdminSession,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<RegistrarResponse>>, StatusCode> {
     registrar::list(&state.db)
@@ -49,6 +50,7 @@ pub(crate) async fn list(
 }
 
 pub(crate) async fn get(
+    _session: AdminSession,
     Path(id): Path<uuid::Uuid>,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<RegistrarResponse>, StatusCode> {
@@ -60,6 +62,7 @@ pub(crate) async fn get(
 }
 
 pub(crate) async fn create(
+    _session: AdminSession,
     State(state): State<Arc<AppState>>,
     Json(request): Json<CreateRegistrarRequest>,
 ) -> Result<(StatusCode, Json<RegistrarResponse>), StatusCode> {

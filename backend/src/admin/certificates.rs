@@ -8,7 +8,10 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{app::AppState, registry::certificate, storage::certificate as storage};
+use crate::{
+    admin::auth::AdminSession, app::AppState, registry::certificate,
+    storage::certificate as storage,
+};
 
 #[derive(Deserialize)]
 pub(crate) struct CreateCertificateRequest {
@@ -43,6 +46,7 @@ impl From<storage::CertificateRow> for CertificateResponse {
 }
 
 pub(crate) async fn list(
+    _session: AdminSession,
     Path(registrar_id): Path<Uuid>,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<CertificateResponse>>, StatusCode> {
@@ -60,6 +64,7 @@ pub(crate) async fn list(
 }
 
 pub(crate) async fn create(
+    _session: AdminSession,
     Path(registrar_id): Path<Uuid>,
     State(state): State<Arc<AppState>>,
     Json(request): Json<CreateCertificateRequest>,

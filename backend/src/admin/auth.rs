@@ -1,10 +1,13 @@
+use std::future::Future;
+
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use axum::{
     Json,
-    extract::State,
+    extract::{FromRequestParts, State},
     http::{
         HeaderMap, StatusCode,
         header::{COOKIE, SET_COOKIE},
+        request::Parts,
     },
 };
 use chrono::{Duration, Utc};
@@ -142,6 +145,32 @@ pub(crate) async fn logout(
         )],
         StatusCode::NO_CONTENT,
     ))
+}
+
+pub(crate) struct AdminSession {
+    _user_id: Uuid,
+}
+
+impl FromRequestParts<Arc<AppState>> for AdminSession {
+    type Rejection = StatusCode;
+
+    fn from_request_parts(
+        parts: &mut Parts,
+        state: &Arc<AppState>,
+    ) -> impl Future<Output = Result<Self, Self::Rejection>> + Send {
+        let token = cookie_value(&parts.headers, SESSION_COOKIE).map(str::to_owned);
+        let state = Arc::clone(state);
+        async move {
+            let token = token.ok_or(StatusCode::UNAUTHORIZED)?;
+            let session = admin::find_session(&state.db, &hash(&token), Utc::now())
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                .ok_or(StatusCode::UNAUTHORIZED)?;
+            Ok(Self {
+                _user_id: session.admin_user_id,
+            })
+        }
+    }
 }
 
 fn random_token() -> String {
