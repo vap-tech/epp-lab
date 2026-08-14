@@ -6,6 +6,7 @@ pub mod domain;
 pub mod epp;
 mod observability;
 mod registry;
+mod security;
 mod storage;
 mod tls;
 
