@@ -4,6 +4,12 @@
 
 ### Changed
 
+- Added the React admin frontend with HTTPS-served SPA fallback, protected
+  routes, server-side admin sessions, CSRF protection, Dashboard and Registrar
+  views.
+- Added direct Rust TLS for the Admin API on the production HTTPS listener and
+  basic security headers including CSP.
+- Added frontend authentication smoke tests and local full-build commands.
 - Split EPP command execution out of the connection handler into
   `epp/dispatch.rs`.
 - Moved `hello`, `login`, `logout`, and parse-error response handling into the
