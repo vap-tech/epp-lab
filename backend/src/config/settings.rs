@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 pub struct Settings {
     pub app_env: String,
     pub admin_bind: SocketAddr,
+    pub frontend_dist: String,
     pub epp_bind: SocketAddr,
     pub database_url: String,
     pub epp_tls_cert: String,
@@ -31,6 +32,7 @@ impl Settings {
             admin_bind: value("ADMIN_BIND", "0.0.0.0:8080")
                 .parse()
                 .context("ADMIN_BIND must be a valid socket address")?,
+            frontend_dist: value("FRONTEND_DIST", "frontend/dist"),
             epp_bind: value("EPP_BIND", "0.0.0.0:700")
                 .parse()
                 .context("EPP_BIND must be a valid socket address")?,

@@ -2,7 +2,13 @@ use std::sync::Arc;
 
 use axum::{
     Router,
-    routing::{get, post},
+    http::{HeaderValue, StatusCode, header},
+    response::IntoResponse,
+    routing::{any, get, post},
+};
+use tower_http::{
+    services::{ServeDir, ServeFile},
+    set_header::SetResponseHeaderLayer,
 };
 
 use crate::app::AppState;
@@ -16,6 +22,11 @@ use super::{
 };
 
 pub(crate) fn router(state: Arc<AppState>) -> Router {
+    let frontend = ServeDir::new(&state.settings.frontend_dist).fallback(ServeFile::new(format!(
+        "{}/index.html",
+        state.settings.frontend_dist
+    )));
+
     Router::new()
         .route("/api/health", get(health))
         .route("/api/auth/login", post(login))
@@ -28,5 +39,23 @@ pub(crate) fn router(state: Arc<AppState>) -> Router {
             "/api/registrars/{id}/certificates",
             get(list_certificates).post(create_certificate),
         )
+        .route("/api/{*path}", any(api_not_found))
+        .fallback_service(frontend)
+        .layer(SetResponseHeaderLayer::if_not_present(
+            header::X_CONTENT_TYPE_OPTIONS,
+            HeaderValue::from_static("nosniff"),
+        ))
+        .layer(SetResponseHeaderLayer::if_not_present(
+            header::X_FRAME_OPTIONS,
+            HeaderValue::from_static("DENY"),
+        ))
+        .layer(SetResponseHeaderLayer::if_not_present(
+            header::REFERRER_POLICY,
+            HeaderValue::from_static("strict-origin-when-cross-origin"),
+        ))
         .with_state(state)
+}
+
+async fn api_not_found() -> impl IntoResponse {
+    StatusCode::NOT_FOUND
 }
