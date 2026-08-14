@@ -14,6 +14,7 @@ pub(crate) struct AdminSessionRow {
     pub id: Uuid,
     pub admin_user_id: Uuid,
     pub username: String,
+    pub csrf_token_hash: String,
 }
 
 pub(crate) async fn find_active_user(
@@ -46,7 +47,7 @@ pub(crate) async fn find_session(
     token_hash: &str,
     now: DateTime<Utc>,
 ) -> Result<Option<AdminSessionRow>, sqlx::Error> {
-    sqlx::query_as("SELECT s.id, s.admin_user_id, u.username FROM admin_sessions s JOIN admin_users u ON u.id = s.admin_user_id WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > $2 AND u.status = 'active'")
+    sqlx::query_as("SELECT s.id, s.admin_user_id, u.username, s.csrf_token_hash FROM admin_sessions s JOIN admin_users u ON u.id = s.admin_user_id WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > $2 AND u.status = 'active'")
         .bind(token_hash).bind(now).fetch_optional(pool).await
 }
 

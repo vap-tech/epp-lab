@@ -151,6 +151,8 @@ pub(crate) struct AdminSession {
     _user_id: Uuid,
 }
 
+pub(crate) struct CsrfProtected;
+
 impl FromRequestParts<Arc<AppState>> for AdminSession {
     type Rejection = StatusCode;
 
@@ -169,6 +171,35 @@ impl FromRequestParts<Arc<AppState>> for AdminSession {
             Ok(Self {
                 _user_id: session.admin_user_id,
             })
+        }
+    }
+}
+
+impl FromRequestParts<Arc<AppState>> for CsrfProtected {
+    type Rejection = StatusCode;
+
+    fn from_request_parts(
+        parts: &mut Parts,
+        state: &Arc<AppState>,
+    ) -> impl Future<Output = Result<Self, Self::Rejection>> + Send {
+        let token = cookie_value(&parts.headers, SESSION_COOKIE).map(str::to_owned);
+        let csrf = parts
+            .headers
+            .get("X-CSRF-Token")
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned);
+        let state = Arc::clone(state);
+        async move {
+            let token = token.ok_or(StatusCode::UNAUTHORIZED)?;
+            let csrf = csrf.ok_or(StatusCode::FORBIDDEN)?;
+            let session = admin::find_session(&state.db, &hash(&token), Utc::now())
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                .ok_or(StatusCode::UNAUTHORIZED)?;
+            if session.csrf_token_hash != hash(&csrf) {
+                return Err(StatusCode::FORBIDDEN);
+            }
+            Ok(Self)
         }
     }
 }

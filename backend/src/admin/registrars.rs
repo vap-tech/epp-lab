@@ -8,7 +8,11 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::{admin::auth::AdminSession, app::AppState, storage::registrar};
+use crate::{
+    admin::auth::{AdminSession, CsrfProtected},
+    app::AppState,
+    storage::registrar,
+};
 
 #[derive(Deserialize)]
 pub(crate) struct CreateRegistrarRequest {
@@ -63,6 +67,7 @@ pub(crate) async fn get(
 
 pub(crate) async fn create(
     _session: AdminSession,
+    _csrf: CsrfProtected,
     State(state): State<Arc<AppState>>,
     Json(request): Json<CreateRegistrarRequest>,
 ) -> Result<(StatusCode, Json<RegistrarResponse>), StatusCode> {

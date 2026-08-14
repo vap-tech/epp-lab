@@ -9,7 +9,9 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    admin::auth::AdminSession, app::AppState, registry::certificate,
+    admin::auth::{AdminSession, CsrfProtected},
+    app::AppState,
+    registry::certificate,
     storage::certificate as storage,
 };
 
@@ -65,6 +67,7 @@ pub(crate) async fn list(
 
 pub(crate) async fn create(
     _session: AdminSession,
+    _csrf: CsrfProtected,
     Path(registrar_id): Path<Uuid>,
     State(state): State<Arc<AppState>>,
     Json(request): Json<CreateCertificateRequest>,
