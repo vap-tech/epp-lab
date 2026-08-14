@@ -50,20 +50,9 @@ function ZoneDetail() {
           </div>
           <div>
             <p className="text-sm text-muted-foreground">Status</p>
-            <div className="mt-1 flex items-center gap-3">
-              <Badge
-                variant={zone.status === "active" ? "default" : "secondary"}
-              >
-                {zone.status}
-              </Badge>
-              <Switch
-                checked={zone.status === "active"}
-                aria-label="Zone active"
-                onCheckedChange={(checked) =>
-                  mutations.status.mutate(checked ? "active" : "disabled")
-                }
-              />
-            </div>
+            <Badge variant={zone.status === "active" ? "default" : "secondary"}>
+              {zone.status}
+            </Badge>
           </div>
           <div>
             <p className="text-sm text-muted-foreground">Created</p>
@@ -76,7 +65,19 @@ function ZoneDetail() {
         </div>
       </section>
       <section className="rounded-lg border p-6">
-        <h2 className="font-semibold">Contact Usage</h2>
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="font-semibold">Contact Usage</h2>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span>Active</span>
+            <Switch
+              checked={zone.status === "active"}
+              aria-label="Zone active"
+              onCheckedChange={(checked) =>
+                mutations.status.mutate(checked ? "active" : "disabled")
+              }
+            />
+          </div>
+        </div>
         <div className="mt-4 grid max-w-3xl gap-x-12 gap-y-3 sm:grid-cols-2">
           <PolicySelect
             label="Registrant"
