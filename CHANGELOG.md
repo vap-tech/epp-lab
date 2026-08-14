@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Connected the Zone Extensions section to the real extension catalog and
+  assignment APIs, with an honest empty production registry state.
 - Added Zone detail UI with General status, Contact Usage policy controls and
   Extensions summary, linked from the Zones list.
 - Added the Zones create dialog with real API mutation, CSRF handling,

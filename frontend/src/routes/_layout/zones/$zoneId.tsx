@@ -8,7 +8,13 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { useUpdateZone, useZone } from "@/hooks/useZones"
+import {
+  useExtensionCatalog,
+  useSetZoneExtension,
+  useUpdateZone,
+  useZone,
+  useZoneExtensions,
+} from "@/hooks/useZones"
 
 const requirements = ["forbidden", "optional", "required"] as const
 type Requirement = (typeof requirements)[number]
@@ -22,6 +28,9 @@ function ZoneDetail() {
   const { zoneId } = Route.useParams()
   const query = useZone(zoneId)
   const mutations = useUpdateZone(zoneId)
+  const catalog = useExtensionCatalog()
+  const assignments = useZoneExtensions(zoneId)
+  const setExtension = useSetZoneExtension(zoneId)
 
   if (query.isPending)
     return <p className="text-muted-foreground">Loading zone…</p>
@@ -118,14 +127,44 @@ function ZoneDetail() {
       </section>
       <section className="rounded-lg border p-6">
         <h2 className="font-semibold">Extensions</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Enabled extensions: {zone.enabled_extensions_count}
-        </p>
-        {zone.enabled_extensions_count === 0 ? (
+        {catalog.data?.length === 0 ? (
           <p className="mt-4 text-sm text-muted-foreground">
-            No extensions enabled.
+            No extensions are registered in this server.
           </p>
-        ) : null}
+        ) : (
+          <div className="mt-4 flex max-w-2xl flex-col gap-3">
+            {catalog.data?.map((extension) => {
+              const enabled =
+                assignments.data?.find(
+                  (item) => item.extension_key === extension.key,
+                )?.enabled ?? false
+              return (
+                <div
+                  key={extension.key}
+                  className="flex items-center justify-between gap-4"
+                >
+                  <div>
+                    <p>{extension.display_name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {extension.key}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={enabled}
+                    disabled={setExtension.isPending}
+                    aria-label={`Enable ${extension.display_name}`}
+                    onCheckedChange={(value) =>
+                      setExtension.mutate({
+                        key: extension.key,
+                        enabled: value,
+                      })
+                    }
+                  />
+                </div>
+              )
+            })}
+          </div>
+        )}
       </section>
     </section>
   )

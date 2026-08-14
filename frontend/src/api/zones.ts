@@ -19,8 +19,20 @@ const zoneSchema = z.object({
   created_at: z.string(),
   updated_at: z.string(),
 })
+const extensionSchema = z.object({
+  key: z.string(),
+  display_name: z.string(),
+  namespace_uri: z.string(),
+})
+const zoneExtensionSchema = z.object({
+  zone_id: z.string(),
+  extension_key: z.string(),
+  enabled: z.boolean(),
+})
 
 export type Zone = z.infer<typeof zoneSchema>
+export type Extension = z.infer<typeof extensionSchema>
+export type ZoneExtension = z.infer<typeof zoneExtensionSchema>
 
 export async function getZones() {
   return z.array(zoneSchema).parse(await api.get<Zone[]>("/zones"))
@@ -44,5 +56,29 @@ export async function updateContactPolicy(
 ) {
   return zoneSchema.parse(
     await api.patch<Zone>(`/zones/${id}/contact-policy`, policy),
+  )
+}
+
+export async function getExtensionCatalog() {
+  return z
+    .array(extensionSchema)
+    .parse(await api.get<Extension[]>("/extensions/catalog"))
+}
+
+export async function getZoneExtensions(zoneId: string) {
+  return z
+    .array(zoneExtensionSchema)
+    .parse(await api.get<ZoneExtension[]>(`/zones/${zoneId}/extensions`))
+}
+
+export async function setZoneExtension(
+  zoneId: string,
+  key: string,
+  enabled: boolean,
+) {
+  return zoneExtensionSchema.parse(
+    await api.patch<ZoneExtension>(`/zones/${zoneId}/extensions/${key}`, {
+      enabled,
+    }),
   )
 }
