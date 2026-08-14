@@ -417,6 +417,12 @@ mod tests {
         )
         .unwrap();
         assert_eq!(parsed.name(), "contact:info");
+        assert_eq!(
+            parsed.command,
+            EppCommand::Contact(ContactCommand::Info(ContactInfoCommand {
+                id: "C123".into()
+            }))
+        );
     }
 
     #[test]

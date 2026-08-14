@@ -130,6 +130,14 @@
 
 ### Added
 
+- Implemented the initial `contact:info` EPP path with sponsoring-registrar
+  authorization and reversible authInfo decryption.
+- Added separate wire and persisted response handling; persisted contact
+  responses redact authInfo.
+- Added read-only Contacts list and detail views to the admin UI.
+
+### Added
+
 - Added read-only Contacts list and detail views to the admin UI.
 - Kept contact authentication information out of admin responses and the UI.
 
