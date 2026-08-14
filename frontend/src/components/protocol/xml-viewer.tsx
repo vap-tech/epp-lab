@@ -64,6 +64,23 @@ export function XmlViewer({
       window.setTimeout(() => setCopied(false), 1200)
     })
   }
+  const copyControl =
+    originalXml !== null ? (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Copy raw XML"
+            className="absolute right-2 top-2 z-10"
+            onClick={copyXml}
+          >
+            {copied ? <CheckIcon /> : <CopyIcon />}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Copy raw XML</TooltipContent>
+      </Tooltip>
+    ) : null
   return (
     <section className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
@@ -79,21 +96,6 @@ export function XmlViewer({
               />
             </div>
           ) : null}
-          {originalXml !== null ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Copy raw XML"
-                  onClick={copyXml}
-                >
-                  {copied ? <CheckIcon /> : <CopyIcon />}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Copy raw XML</TooltipContent>
-            </Tooltip>
-          ) : null}
         </div>
       </div>
       {originalXml === null ? (
@@ -101,17 +103,23 @@ export function XmlViewer({
           No XML recorded.
         </p>
       ) : highlighted ? (
-        <div
-          className={`xml-viewer max-h-[550px] overflow-auto rounded-lg border bg-muted/30 p-4 text-xs font-mono ${wrap ? "whitespace-pre-wrap" : "whitespace-pre"}`}
-          // biome-ignore lint/security/noDangerouslySetInnerHtml: Prism escapes XML before producing local token markup.
-          dangerouslySetInnerHTML={{ __html: highlighted }}
-        />
+        <div className="relative">
+          {copyControl}
+          <div
+            className={`xml-viewer max-h-[550px] overflow-auto rounded-lg border bg-muted/30 p-4 pr-12 text-xs font-mono ${wrap ? "whitespace-pre-wrap" : "whitespace-pre"}`}
+            // biome-ignore lint/security/noDangerouslySetInnerHtml: Prism escapes XML before producing local token markup.
+            dangerouslySetInnerHTML={{ __html: highlighted }}
+          />
+        </div>
       ) : (
-        <pre
-          className={`max-h-[550px] overflow-auto rounded-lg border bg-muted/30 p-4 text-xs ${wrap ? "whitespace-pre-wrap" : "whitespace-pre"}`}
-        >
-          {displayXml}
-        </pre>
+        <div className="relative">
+          {copyControl}
+          <pre
+            className={`max-h-[550px] overflow-auto rounded-lg border bg-muted/30 p-4 pr-12 text-xs ${wrap ? "whitespace-pre-wrap" : "whitespace-pre"}`}
+          >
+            {displayXml}
+          </pre>
+        </div>
       )}
     </section>
   )
@@ -138,10 +146,10 @@ function SwitchControl({
       {label}
       <span
         aria-hidden="true"
-        className={`relative h-4 w-7 rounded-full transition-colors ${checked ? "bg-primary" : "bg-muted-foreground/40"}`}
+        className={`relative h-4 w-7 rounded-full transition-colors ${checked ? "bg-primary" : "bg-muted-foreground/50"}`}
       >
         <span
-          className={`absolute top-0.5 size-3 rounded-full bg-background transition-transform ${checked ? "translate-x-3.5" : "translate-x-0.5"}`}
+          className={`absolute top-0.5 size-3 rounded-full bg-white shadow-sm transition-transform ${checked ? "translate-x-3.5" : "translate-x-0.5"}`}
         />
       </span>
     </button>
