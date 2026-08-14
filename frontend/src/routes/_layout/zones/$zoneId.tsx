@@ -39,25 +39,45 @@ function ZoneDetail() {
       </div>
       <section className="rounded-lg border p-6">
         <h2 className="font-semibold">General</h2>
-        <div className="mt-4 flex items-center justify-between gap-4">
+        <div className="mt-4 grid max-w-3xl gap-4 sm:grid-cols-2">
+          <div>
+            <p className="text-sm text-muted-foreground">Canonical name</p>
+            <p className="font-mono">{zone.ascii_name}</p>
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">Unicode name</p>
+            <p>{zone.unicode_name}</p>
+          </div>
           <div>
             <p className="text-sm text-muted-foreground">Status</p>
-            <Badge variant={zone.status === "active" ? "default" : "secondary"}>
-              {zone.status}
-            </Badge>
+            <div className="mt-1 flex items-center gap-3">
+              <Badge
+                variant={zone.status === "active" ? "default" : "secondary"}
+              >
+                {zone.status}
+              </Badge>
+              <Switch
+                checked={zone.status === "active"}
+                aria-label="Zone active"
+                onCheckedChange={(checked) =>
+                  mutations.status.mutate(checked ? "active" : "disabled")
+                }
+              />
+            </div>
           </div>
-          <Switch
-            checked={zone.status === "active"}
-            aria-label="Zone active"
-            onCheckedChange={(checked) =>
-              mutations.status.mutate(checked ? "active" : "disabled")
-            }
-          />
+          <div>
+            <p className="text-sm text-muted-foreground">Created</p>
+            <p>{new Date(zone.created_at).toLocaleString()}</p>
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">Updated</p>
+            <p>{new Date(zone.updated_at).toLocaleString()}</p>
+          </div>
         </div>
       </section>
       <section className="rounded-lg border p-6">
         <h2 className="font-semibold">Contact Usage</h2>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <div className="mt-4 grid max-w-3xl gap-x-12 gap-y-3 sm:grid-cols-2">
           <PolicySelect
             label="Registrant"
             value={zone.contact_policy.registrant}
