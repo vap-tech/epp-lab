@@ -162,6 +162,48 @@ pub struct Contact {
     pub updated_at: DateTime<Utc>,
     pub transferred_at: Option<DateTime<Utc>>,
 }
+
+impl Contact {
+    pub fn validate(&self) -> Result<(), ContactValidationError> {
+        if self.auth_info.is_empty() {
+            return Err(ContactValidationError::MissingAuthInfo);
+        }
+        if self.postal_info.international.name.is_empty() {
+            return Err(ContactValidationError::MissingInternationalName);
+        }
+        self.postal_info
+            .international
+            .address
+            .validate()
+            .map_err(ContactValidationError::InvalidField)?;
+        self.voice
+            .validate()
+            .map_err(ContactValidationError::InvalidField)?;
+        if (self.client_statuses.contains(&ContactStatus::Ok) && self.client_statuses.len() > 1)
+            || (self.server_statuses.contains(&ContactStatus::Ok) && self.server_statuses.len() > 1)
+        {
+            return Err(ContactValidationError::OkStatusConflict);
+        }
+        if self.updated_at < self.created_at {
+            return Err(ContactValidationError::InvalidTimestamps);
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum ContactValidationError {
+    #[error("authInfo is required")]
+    MissingAuthInfo,
+    #[error("international postal name is required")]
+    MissingInternationalName,
+    #[error("contact field is invalid: {0}")]
+    InvalidField(ContactFieldError),
+    #[error("ok status cannot be combined with another status in the same source")]
+    OkStatusConflict,
+    #[error("updated_at cannot be earlier than created_at")]
+    InvalidTimestamps,
+}
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ContactFieldError {
     #[error("{0} is required")]

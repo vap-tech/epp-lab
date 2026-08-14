@@ -16,6 +16,8 @@
   repository with ciphertext storage and registrar foreign-key enforcement.
 - Split EPP response wire XML from persisted XML so secret-bearing commands
   can safely redact transaction history without changing the registrar reply.
+- Added aggregate-level Contact validation for required authInfo, postal/voice
+  data, status combinations and timestamp ordering.
 - Added the initial RFC 5733 Contact domain foundation with validated
   identities, postal data, phone/email values, statuses and disclosure types.
 - Added PostgreSQL-backed Admin API integration tests and a dedicated test
