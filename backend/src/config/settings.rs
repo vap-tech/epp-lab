@@ -54,7 +54,7 @@ impl Settings {
             epp_max_frame_size: value("EPP_MAX_FRAME_SIZE", "1048576")
                 .parse()
                 .context("EPP_MAX_FRAME_SIZE must be an integer")?,
-            epp_object_uris: list("EPP_OBJECT_URIS", "urn:ietf:params:xml:ns:domain-1.0"),
+            epp_object_uris: object_uris(),
             epp_extension_uris: list("EPP_EXTENSION_URIS", ""),
             tcp_keepalive_idle: seconds("TCP_KEEPALIVE_IDLE", 60),
             tcp_keepalive_interval: seconds("TCP_KEEPALIVE_INTERVAL", 30),
@@ -63,6 +63,15 @@ impl Settings {
                 .context("TCP_KEEPALIVE_RETRIES must be an integer")?,
         })
     }
+}
+
+fn object_uris() -> Vec<String> {
+    const CONTACT_URI: &str = "urn:ietf:params:xml:ns:contact-1.0";
+    let mut uris = list("EPP_OBJECT_URIS", "urn:ietf:params:xml:ns:domain-1.0");
+    if !uris.iter().any(|uri| uri == CONTACT_URI) {
+        uris.push(CONTACT_URI.to_owned());
+    }
+    uris
 }
 
 fn value(name: &str, default: &str) -> String {

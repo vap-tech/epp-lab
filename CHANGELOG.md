@@ -14,6 +14,8 @@
   persistence reads, EPP info rendering and read-only Admin detail display.
 - Added `contact:disclose` rendering to EPP info responses from the persisted
   disclosure preference.
+- Made the Contact object URI mandatory in advertised and negotiated service
+  configuration, including the external smoke client.
 - Completed optional Contact update clearing for fax, organization,
   state/province and postal code; empty XML elements now become SQL `NULL`.
 - Added PostgreSQL coverage for both atomic Contact update rollback and

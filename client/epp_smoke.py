@@ -36,7 +36,8 @@ def command_xml(command: str, cl_trid: str, client_id: str | None = None, passwo
 <epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><login>
 <clID>{client_id}</clID><pw>{password}</pw>
 <options><version>1.0</version><lang>en</lang></options>
-<svcs><objURI>urn:ietf:params:xml:ns:domain-1.0</objURI></svcs>
+<svcs><objURI>urn:ietf:params:xml:ns:domain-1.0</objURI>
+<objURI>urn:ietf:params:xml:ns:contact-1.0</objURI></svcs>
 </login><clTRID>{cl_trid}</clTRID></command></epp>'''.encode()
     if command == "logout":
         return f'''<?xml version="1.0"?>
