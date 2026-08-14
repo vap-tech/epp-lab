@@ -1,3 +1,4 @@
+import { createJavaScriptRegexEngine } from "@shikijs/engine-javascript"
 import { useEffect, useMemo, useState } from "react"
 import { createHighlighter } from "shiki"
 import { toast } from "sonner"
@@ -11,6 +12,7 @@ let highlighterPromise: ReturnType<typeof createHighlighter> | undefined
 function getXmlHighlighter() {
   if (!highlighterPromise) {
     highlighterPromise = createHighlighter({
+      engine: createJavaScriptRegexEngine(),
       themes: ["github-light", "github-dark"],
       langs: ["xml"],
     })
