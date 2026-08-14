@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Added authenticated Zone detail and status update endpoints; Zone rename and
+  deletion remain unsupported.
 - Added CSRF-protected `POST /api/zones` with IDNA validation, explicit
   defaults and atomic Zone/contact-policy creation.
 - Added the authenticated read-only `GET /api/zones` endpoint with explicit

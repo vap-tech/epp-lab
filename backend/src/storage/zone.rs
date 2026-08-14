@@ -62,6 +62,22 @@ pub(crate) async fn find(pool: &PgPool, id: Uuid) -> Result<Option<ZoneRow>, sql
 }
 
 #[allow(dead_code)]
+pub(crate) async fn update_status(
+    pool: &PgPool,
+    id: Uuid,
+    status: &str,
+    now: DateTime<Utc>,
+) -> Result<bool, sqlx::Error> {
+    let result = sqlx::query("UPDATE zones SET status = $2, updated_at = $3 WHERE id = $1")
+        .bind(id)
+        .bind(status)
+        .bind(now)
+        .execute(pool)
+        .await?;
+    Ok(result.rows_affected() == 1)
+}
+
+#[allow(dead_code)]
 pub(crate) async fn create(
     pool: &PgPool,
     zone: &Zone,

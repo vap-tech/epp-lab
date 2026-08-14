@@ -1,4 +1,8 @@
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{
+    Json,
+    extract::{Path, State},
+    http::StatusCode,
+};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -110,6 +114,45 @@ pub(crate) async fn create(
     ZoneResponse::try_from(row)
         .map(|response| (StatusCode::CREATED, Json(response)))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+pub(crate) async fn get(
+    _session: AdminSession,
+    Path(id): Path<Uuid>,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ZoneResponse>, StatusCode> {
+    zone::find(&state.db, id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .map(ZoneResponse::try_from)
+        .transpose()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct UpdateZoneRequest {
+    pub status: String,
+}
+
+pub(crate) async fn update(
+    _session: AdminSession,
+    _csrf: CsrfProtected,
+    Path(id): Path<Uuid>,
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<UpdateZoneRequest>,
+) -> Result<Json<ZoneResponse>, StatusCode> {
+    if !matches!(request.status.as_str(), "active" | "disabled") {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    if !zone::update_status(&state.db, id, &request.status, chrono::Utc::now())
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    get(_session, Path(id), State(state)).await
 }
 
 fn parse_requirement(value: &str) -> Result<crate::domain::zone::ContactRequirement, String> {
