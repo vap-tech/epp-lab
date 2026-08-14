@@ -190,9 +190,38 @@ pub(crate) async fn execute_contact_create(
         chrono::Utc::now(),
     )
     .map_err(|error| super::framing::FrameError::Write(std::io::Error::other(error)))?;
-    crate::storage::contact::create(db, &contact)
+    if crate::storage::contact::exists_by_roid(db, contact.roid.as_str())
         .await
-        .map_err(|error| super::framing::FrameError::Write(std::io::Error::other(error)))?;
+        .map_err(|error| super::framing::FrameError::Write(std::io::Error::other(error)))?
+    {
+        return super::protocol::send_response(
+            stream,
+            limits,
+            2302,
+            "object exists",
+            cl_trid,
+            sv_trid,
+        )
+        .await;
+    }
+    if let Err(error) = crate::storage::contact::create(db, &contact).await {
+        if let sqlx::Error::Database(database_error) = &error
+            && database_error.constraint() == Some("contacts_roid_key")
+        {
+            return super::protocol::send_response(
+                stream,
+                limits,
+                2302,
+                "object exists",
+                cl_trid,
+                sv_trid,
+            )
+            .await;
+        }
+        return Err(super::framing::FrameError::Write(std::io::Error::other(
+            error,
+        )));
+    }
     let created_at = contact.created_at.to_rfc3339();
     match super::protocol::send_contact_create(
         stream,
@@ -260,12 +289,18 @@ pub(crate) async fn execute_contact_info(
         )
         .await;
     };
-    if identity.sponsoring_registrar_id != registrar_id {
+    let full_access = identity.sponsoring_registrar_id == registrar_id;
+    let auth = cipher
+        .decrypt(&identity.auth_info_ciphertext)
+        .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?;
+    let auth = String::from_utf8(auth)
+        .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?;
+    if !full_access && command.auth_info.as_deref() != Some(auth.as_str()) {
         return super::protocol::send_response(
             stream,
             limits,
-            2201,
-            "authorization error",
+            2202,
+            "invalid authorization information",
             cl_trid,
             sv_trid,
         )
@@ -277,14 +312,16 @@ pub(crate) async fn execute_contact_info(
         .ok_or_else(|| {
             super::framing::FrameError::Write(std::io::Error::other("contact disappeared"))
         })?;
-    let auth = cipher
-        .decrypt(&identity.auth_info_ciphertext)
-        .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?;
-    let auth = String::from_utf8(auth)
-        .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?;
     let statuses = crate::application::effective_contact_statuses(&contact.statuses, false);
     match super::protocol::send_contact_info(
-        stream, limits, &contact, &statuses, &auth, cl_trid, sv_trid,
+        stream,
+        limits,
+        &contact,
+        &statuses,
+        full_access.then_some(auth.as_str()),
+        full_access,
+        cl_trid,
+        sv_trid,
     )
     .await
     {
@@ -343,9 +380,12 @@ pub(crate) async fn execute_contact_delete(
         )
         .await;
     }
-    if crate::storage::contact::has_client_status(db, identity.id, "clientDeleteProhibited")
+    if crate::storage::contact::has_status(db, identity.id, "clientDeleteProhibited")
         .await
         .map_err(|error| super::framing::FrameError::Write(std::io::Error::other(error)))?
+        || crate::storage::contact::has_status(db, identity.id, "serverDeleteProhibited")
+            .await
+            .map_err(|error| super::framing::FrameError::Write(std::io::Error::other(error)))?
     {
         return super::protocol::send_response(
             stream,
@@ -505,9 +545,28 @@ pub(crate) async fn execute_contact_update(
         )
         .await;
     }
-    if crate::storage::contact::has_client_status(db, identity.id, "clientUpdateProhibited")
+    let removes_update_prohibition_only = command.rem_statuses.len() == 1
+        && command.rem_statuses[0] == "clientUpdateProhibited"
+        && command.add_statuses.is_empty()
+        && command.chg_email.is_unchanged()
+        && command.chg_auth_info.is_unchanged()
+        && command.chg_voice.is_unchanged()
+        && command.chg_fax.is_unchanged()
+        && command.chg_organization.is_unchanged()
+        && command.chg_city.is_unchanged()
+        && command.chg_state_province.is_unchanged()
+        && command.chg_postal_code.is_unchanged()
+        && command.chg_country_code.is_unchanged()
+        && command.chg_streets.is_empty()
+        && command.chg_disclose.is_unchanged()
+        && command.chg_disclose_fields.is_empty();
+    if (crate::storage::contact::has_status(db, identity.id, "clientUpdateProhibited")
         .await
         .map_err(|error| super::framing::FrameError::Write(std::io::Error::other(error)))?
+        && !removes_update_prohibition_only)
+        || crate::storage::contact::has_status(db, identity.id, "serverUpdateProhibited")
+            .await
+            .map_err(|error| super::framing::FrameError::Write(std::io::Error::other(error)))?
     {
         return super::protocol::send_response(
             stream,
@@ -640,6 +699,7 @@ pub(crate) async fn execute_contact_update(
         db,
         crate::storage::contact::ContactUpdate {
             id: identity.id,
+            updated_by: registrar_id,
             auth_info_ciphertext: auth.as_deref(),
             email,
             voice,

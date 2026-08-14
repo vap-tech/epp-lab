@@ -32,6 +32,7 @@ pub(crate) struct ContactCheckCommand {
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct ContactInfoCommand {
     pub id: String,
+    pub auth_info: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -74,6 +75,8 @@ pub(crate) struct ContactCreateCommand {
     pub fax_extension: Option<String>,
     pub email: String,
     pub auth_info: String,
+    pub disclose_flag: Option<String>,
+    pub disclose_fields: Vec<String>,
     pub localized: Option<ContactPostalInfoCommand>,
 }
 
@@ -225,12 +228,17 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                             fax_extension: None,
                             email: String::new(),
                             auth_info: String::new(),
+                            disclose_flag: None,
+                            disclose_fields: Vec::new(),
                             localized: None,
                         },
                     )));
                 } else if name.ends_with(b"info") {
                     command = Some(EppCommand::Contact(ContactCommand::Info(
-                        ContactInfoCommand { id: String::new() },
+                        ContactInfoCommand {
+                            id: String::new(),
+                            auth_info: None,
+                        },
                     )));
                 } else if name.ends_with(b"update") {
                     command = Some(EppCommand::Contact(ContactCommand::Update(
@@ -265,6 +273,15 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                         .and_then(|attribute| attribute.unescape_value().ok())
                         .map(|value| value.into_owned());
                 }
+                if name.ends_with(b"disclose")
+                    && let Some(flag) = event
+                        .attributes()
+                        .flatten()
+                        .find(|attribute| attribute.key.as_ref() == b"flag")
+                        .and_then(|attribute| attribute.unescape_value().ok())
+                {
+                    contact_create_values.insert("disclose", flag.into_owned());
+                }
                 path.push(name);
             }
             Ok(Event::Empty(event)) => {
@@ -286,14 +303,20 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                     }
                 }
                 if path.iter().any(|part| part.ends_with(b"disclose")) {
-                    let field = match name.as_slice() {
-                        b"name" => Some("name"),
-                        b"org" => Some("organization"),
-                        b"addr" => Some("address"),
-                        b"voice" => Some("voice"),
-                        b"fax" => Some("fax"),
-                        b"email" => Some("email"),
-                        _ => None,
+                    let field = if name.ends_with(b"name") {
+                        Some("name")
+                    } else if name.ends_with(b"org") {
+                        Some("organization")
+                    } else if name.ends_with(b"addr") {
+                        Some("address")
+                    } else if name.ends_with(b"voice") {
+                        Some("voice")
+                    } else if name.ends_with(b"fax") {
+                        Some("fax")
+                    } else if name.ends_with(b"email") {
+                        Some("email")
+                    } else {
+                        None
                     };
                     if let Some(field) = field {
                         contact_disclose_fields.push(field.to_owned());
@@ -495,6 +518,8 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
             create.auth_info = contact_create_values
                 .remove("pw")
                 .ok_or(ParseError::Command)?;
+            create.disclose_flag = contact_create_values.remove("disclose");
+            create.disclose_fields = contact_disclose_fields;
             if !contact_localized_values.is_empty() || !contact_localized_streets.is_empty() {
                 create.localized = Some(ContactPostalInfoCommand {
                     name: contact_localized_values
@@ -519,6 +544,7 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
         }
         Some(EppCommand::Contact(ContactCommand::Info(mut info))) => {
             info.id = contact_ids.first().cloned().ok_or(ParseError::Command)?;
+            info.auth_info = contact_create_values.remove("pw");
             Ok(ParsedCommand {
                 command: EppCommand::Contact(ContactCommand::Info(info)),
                 cl_trid,
@@ -690,7 +716,8 @@ mod tests {
         assert_eq!(
             parsed.command,
             EppCommand::Contact(ContactCommand::Info(ContactInfoCommand {
-                id: "C123".into()
+                id: "C123".into(),
+                auth_info: None,
             }))
         );
     }
@@ -822,7 +849,7 @@ mod tests {
     #[test]
     fn parses_contact_create_required_and_optional_fields() {
         let parsed = parse_command(
-            br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><create><contact:create xmlns:contact="urn:ietf:params:xml:ns:contact-1.0"><contact:id>C123</contact:id><contact:postalInfo type="int"><contact:name>Name</contact:name><contact:org>Org</contact:org><contact:addr><contact:street>Main 1</contact:street><contact:city>Moscow</contact:city><contact:cc>RU</contact:cc></contact:addr></contact:postalInfo><contact:voice x="123">+70000000000</contact:voice><contact:email>a@example.test</contact:email><contact:authInfo><contact:pw>secret</contact:pw></contact:authInfo></contact:create></create></command></epp>"#,
+            br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><create><contact:create xmlns:contact="urn:ietf:params:xml:ns:contact-1.0"><contact:id>C123</contact:id><contact:postalInfo type="int"><contact:name>Name</contact:name><contact:org>Org</contact:org><contact:addr><contact:street>Main 1</contact:street><contact:city>Moscow</contact:city><contact:cc>RU</contact:cc></contact:addr></contact:postalInfo><contact:voice x="123">+70000000000</contact:voice><contact:email>a@example.test</contact:email><contact:authInfo><contact:pw>secret</contact:pw></contact:authInfo><contact:disclose flag="1"><contact:email/></contact:disclose></contact:create></create></command></epp>"#,
         )
         .unwrap();
         let EppCommand::Contact(ContactCommand::Create(create)) = parsed.command else {
@@ -834,6 +861,8 @@ mod tests {
         assert_eq!(create.streets, vec!["Main 1"]);
         assert_eq!(create.country_code, "RU");
         assert_eq!(create.auth_info, "secret");
+        assert_eq!(create.disclose_flag.as_deref(), Some("1"));
+        assert_eq!(create.disclose_fields, ["email"]);
     }
 
     #[test]

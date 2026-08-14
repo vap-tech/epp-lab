@@ -2,13 +2,24 @@ use std::sync::Arc;
 
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
 };
 use serde::Serialize;
 use uuid::Uuid;
 
 use crate::{admin::auth::AdminSession, app::AppState};
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct ContactQuery {
+    pub page: Option<i64>,
+    pub page_size: Option<i64>,
+    pub registrar_id: Option<Uuid>,
+    pub status: Option<String>,
+    pub search: Option<String>,
+    pub created_from: Option<chrono::DateTime<chrono::Utc>>,
+    pub created_to: Option<chrono::DateTime<chrono::Utc>>,
+}
 
 #[derive(Debug, Serialize)]
 pub(crate) struct ContactSummary {
@@ -58,11 +69,38 @@ pub(crate) struct ContactPostalInfo {
 pub(crate) async fn list(
     _session: AdminSession,
     State(state): State<Arc<AppState>>,
-) -> Result<Json<Vec<ContactSummary>>, StatusCode> {
-    let rows = crate::storage::contact::list_summaries(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(rows.into_iter().map(ContactSummary::from).collect()))
+    Query(query): Query<ContactQuery>,
+) -> Result<Json<crate::admin::epp::Page<ContactSummary>>, StatusCode> {
+    let page = query.page.unwrap_or(1);
+    let page_size = query.page_size.unwrap_or(50);
+    if page < 1 || !(1..=100).contains(&page_size) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let (rows, total) = crate::storage::contact::list_summaries(
+        &state.db,
+        crate::storage::contact::ContactListQuery {
+            page,
+            page_size,
+            registrar_id: query.registrar_id,
+            status: query.status.as_deref(),
+            search: query.search.as_deref(),
+            created_from: query.created_from,
+            created_to: query.created_to,
+        },
+    )
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(crate::admin::epp::Page {
+        items: rows.into_iter().map(ContactSummary::from).collect(),
+        page,
+        page_size,
+        total,
+        total_pages: if total == 0 {
+            0
+        } else {
+            (total + page_size - 1) / page_size
+        },
+    }))
 }
 
 pub(crate) async fn get(

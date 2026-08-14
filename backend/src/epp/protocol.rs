@@ -150,18 +150,42 @@ where
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn send_contact_info<S>(
     stream: &mut S,
     limits: &FrameLimits,
     contact: &crate::storage::contact::ContactDetailRow,
     statuses: &[String],
-    auth_info: &str,
+    auth_info: Option<&str>,
+    full_access: bool,
     cl_trid: Option<&str>,
     sv_trid: &str,
 ) -> Result<Response, FrameError>
 where
     S: AsyncWrite + Unpin,
 {
+    let phone = |element: &str, number: &str, extension: Option<&str>| match extension {
+        Some(extension) => format!(
+            r#"<contact:{element} x="{}">{}</contact:{element}>"#,
+            escape_xml(extension),
+            escape_xml(number),
+        ),
+        None => format!(
+            "<contact:{element}>{}</contact:{element}>",
+            escape_xml(number)
+        ),
+    };
+    let allows = |field: &str| {
+        full_access
+            || (contact.disclose_flag == "public"
+                && contact.disclosure_fields.iter().any(|value| value == field))
+    };
+    let show_name = allows("name");
+    let show_organization = allows("organization");
+    let show_address = allows("address");
+    // RFC postalInfo requires both name and address. A non-sponsor response
+    // omits the whole element unless it can remain schema-valid.
+    let show_postal_info = show_name && show_address;
     let streets = contact
         .streets
         .iter()
@@ -171,10 +195,59 @@ where
         .iter()
         .map(|status| format!(r#"<contact:status s="{}"/>"#, escape_xml(status)))
         .collect::<String>();
-    let localized_postal_info = contact
-        .localized_name
-        .as_ref()
-        .map(|name| {
+    let postal_info = if show_postal_info {
+        let name = format!("<contact:name>{}</contact:name>", escape_xml(&contact.name));
+        format!(
+            "<contact:postalInfo type=\"int\">{}{}<contact:addr>{}<contact:city>{}</contact:city>{}<contact:cc>{}</contact:cc></contact:addr></contact:postalInfo>",
+            name,
+            if show_organization {
+                contact
+                    .organization
+                    .as_deref()
+                    .map(|organization| {
+                        format!("<contact:org>{}</contact:org>", escape_xml(organization))
+                    })
+                    .unwrap_or_default()
+            } else {
+                String::new()
+            },
+            if show_address { streets } else { String::new() },
+            if show_address {
+                escape_xml(&contact.city)
+            } else {
+                String::new()
+            },
+            if show_address {
+                format!(
+                    "{}{}",
+                    contact
+                        .state_province
+                        .as_deref()
+                        .map(|state| format!("<contact:sp>{}</contact:sp>", escape_xml(state)))
+                        .unwrap_or_default(),
+                    contact
+                        .postal_code
+                        .as_deref()
+                        .map(|postal_code| format!(
+                            "<contact:pc>{}</contact:pc>",
+                            escape_xml(postal_code)
+                        ))
+                        .unwrap_or_default()
+                )
+            } else {
+                String::new()
+            },
+            if show_address {
+                escape_xml(&contact.country_code)
+            } else {
+                String::new()
+            },
+        )
+    } else {
+        String::new()
+    };
+    let localized_postal_info = if show_postal_info {
+        contact.localized_name.as_ref().map(|name| {
             let streets = contact
                 .localized_streets
                 .iter()
@@ -183,15 +256,17 @@ where
             format!(
                 "<contact:postalInfo type=\"loc\"><contact:name>{}</contact:name>{}<contact:addr>{}{}{}<contact:city>{}</contact:city><contact:cc>{}</contact:cc></contact:addr></contact:postalInfo>",
                 escape_xml(name),
-                contact.localized_organization.as_deref().map(|organization| format!("<contact:org>{}</contact:org>", escape_xml(organization))).unwrap_or_default(),
-                streets,
+                if show_organization { contact.localized_organization.as_deref().map(|organization| format!("<contact:org>{}</contact:org>", escape_xml(organization))).unwrap_or_default() } else { String::new() },
+                if show_address { streets } else { String::new() },
                 contact.localized_state_province.as_deref().map(|state_province| format!("<contact:sp>{}</contact:sp>", escape_xml(state_province))).unwrap_or_default(),
                 contact.localized_postal_code.as_deref().map(|postal_code| format!("<contact:pc>{}</contact:pc>", escape_xml(postal_code))).unwrap_or_default(),
-                escape_xml(contact.localized_city.as_deref().unwrap_or_default()),
-                escape_xml(contact.localized_country_code.as_deref().unwrap_or_default()),
+                if show_address { escape_xml(contact.localized_city.as_deref().unwrap_or_default()) } else { String::new() },
+                if show_address { escape_xml(contact.localized_country_code.as_deref().unwrap_or_default()) } else { String::new() },
             )
-        })
-        .unwrap_or_default();
+        }).unwrap_or_default()
+    } else {
+        String::new()
+    };
     let disclose_fields = contact
         .disclosure_fields
         .iter()
@@ -214,36 +289,78 @@ where
             "0"
         }
     );
+    let fax = if allows("fax") {
+        contact
+            .fax
+            .as_deref()
+            .map(|fax| phone("fax", fax, contact.fax_extension.as_deref()))
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let update_metadata = if contact.updated_at > contact.created_at {
+        format!(
+            "<contact:upID>{}</contact:upID><contact:upDate>{}</contact:upDate>",
+            escape_xml(contact.updated_by_handle.as_deref().unwrap_or_default()),
+            contact.updated_at.to_rfc3339(),
+        )
+    } else {
+        String::new()
+    };
+    let transfer_metadata = contact
+        .transferred_at
+        .map(|transferred_at| {
+            format!(
+                "<contact:trDate>{}</contact:trDate>",
+                transferred_at.to_rfc3339()
+            )
+        })
+        .unwrap_or_default();
     let wire = format!(
-        r#"<?xml version="1.0" encoding="UTF-8"?><epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><response><result code="1000"><msg>Command completed successfully</msg></result><resData><contact:infData xmlns:contact="urn:ietf:params:xml:ns:contact-1.0"><contact:id>{}</contact:id><contact:roid>{}</contact:roid>{}<contact:postalInfo type="int"><contact:name>{}</contact:name>{}<contact:addr>{}<contact:city>{}</contact:city><contact:cc>{}</contact:cc></contact:addr></contact:postalInfo>{}<contact:voice>{}</contact:voice><contact:email>{}</contact:email>{}<contact:authInfo><contact:pw>{}</contact:pw></contact:authInfo><contact:crDate>{}</contact:crDate><contact:upDate>{}</contact:upDate></contact:infData></resData>{}<svTRID>{}</svTRID></response></epp>"#,
+        r#"<?xml version="1.0" encoding="UTF-8"?><epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><response><result code="1000"><msg>Command completed successfully</msg></result><resData><contact:infData xmlns:contact="urn:ietf:params:xml:ns:contact-1.0"><contact:id>{}</contact:id><contact:roid>{}</contact:roid>{}{}{}{}{}{}{}{}<contact:clID>{}</contact:clID><contact:crID>{}</contact:crID><contact:crDate>{}</contact:crDate>{}{}</contact:infData></resData>{}<svTRID>{}</svTRID></response></epp>"#,
         escape_xml(&contact.roid),
         escape_xml(&contact.roid),
         statuses,
-        escape_xml(&contact.name),
-        contact
-            .organization
-            .as_deref()
-            .map(|o| format!("<contact:org>{}</contact:org>", escape_xml(o)))
-            .unwrap_or_default(),
-        streets,
-        escape_xml(&contact.city),
-        escape_xml(&contact.country_code),
+        postal_info,
         localized_postal_info,
-        escape_xml(&contact.voice),
-        escape_xml(&contact.email),
+        if allows("voice") {
+            phone("voice", &contact.voice, contact.voice_extension.as_deref())
+        } else {
+            String::new()
+        },
+        fax,
+        if allows("email") {
+            format!(
+                "<contact:email>{}</contact:email>",
+                escape_xml(&contact.email)
+            )
+        } else {
+            String::new()
+        },
         disclose,
-        escape_xml(auth_info),
+        auth_info
+            .map(|value| format!(
+                "<contact:authInfo><contact:pw>{}</contact:pw></contact:authInfo>",
+                escape_xml(value)
+            ))
+            .unwrap_or_default(),
+        escape_xml(contact.registrar_handle.as_deref().unwrap_or_default()),
+        escape_xml(contact.created_by_handle.as_deref().unwrap_or_default()),
         contact.created_at.to_rfc3339(),
-        contact.updated_at.to_rfc3339(),
+        update_metadata,
+        transfer_metadata,
         cl_trid
             .map(|v| format!("<clTRID>{}</clTRID>", escape_xml(v)))
             .unwrap_or_default(),
         escape_xml(sv_trid)
     );
-    let persisted = wire.replace(
-        &format!("<contact:pw>{}</contact:pw>", escape_xml(auth_info)),
-        "<contact:pw>REDACTED</contact:pw>",
-    );
+    let persisted = match auth_info {
+        Some(value) => wire.replace(
+            &format!("<contact:pw>{}</contact:pw>", escape_xml(value)),
+            "<contact:pw>REDACTED</contact:pw>",
+        ),
+        None => wire.clone(),
+    };
     write_frame(stream, wire.as_bytes(), limits).await?;
     Ok(Response {
         xml: wire,
@@ -324,6 +441,8 @@ mod tests {
             roid: "C123".into(),
             sponsoring_registrar_id: uuid::Uuid::new_v4(),
             registrar_handle: Some("demo".into()),
+            created_by_handle: Some("demo".into()),
+            updated_by_handle: Some("demo".into()),
             email: "contact@example.test".into(),
             voice: "+70000000000".into(),
             voice_extension: None,
@@ -348,13 +467,15 @@ mod tests {
             statuses: vec!["ok".into()],
             created_at: now,
             updated_at: now,
+            transferred_at: None,
         };
         let response = send_contact_info(
             &mut client,
             &limits(),
             &contact,
             &["ok".to_owned()],
-            "secret-auth",
+            Some("secret-auth"),
+            true,
             Some("T1"),
             "S1",
         )
@@ -369,5 +490,61 @@ mod tests {
         assert!(response.xml.contains("<contact:email/>"));
         assert!(!response.persisted_xml.contains("secret-auth"));
         assert!(response.persisted_xml.contains("REDACTED"));
+    }
+
+    #[tokio::test]
+    async fn contact_info_for_non_sponsor_hides_private_fields_and_auth_info() {
+        let (mut client, mut server) = duplex(4096);
+        let now = chrono::Utc::now();
+        let contact = crate::storage::contact::ContactDetailRow {
+            id: uuid::Uuid::new_v4(),
+            roid: "C123".into(),
+            sponsoring_registrar_id: uuid::Uuid::new_v4(),
+            registrar_handle: Some("demo".into()),
+            created_by_handle: Some("demo".into()),
+            updated_by_handle: Some("demo".into()),
+            email: "private@example.test".into(),
+            voice: "+70000000000".into(),
+            voice_extension: None,
+            fax: None,
+            fax_extension: None,
+            name: "Private Name".into(),
+            organization: None,
+            streets: vec!["Private Street".into()],
+            city: "Moscow".into(),
+            state_province: None,
+            postal_code: None,
+            country_code: "RU".into(),
+            localized_name: None,
+            localized_organization: None,
+            localized_streets: vec![],
+            localized_city: None,
+            localized_state_province: None,
+            localized_postal_code: None,
+            localized_country_code: None,
+            disclose_flag: "private".into(),
+            disclosure_fields: vec![],
+            statuses: vec!["ok".into()],
+            created_at: now,
+            updated_at: now,
+            transferred_at: None,
+        };
+        let response = send_contact_info(
+            &mut client,
+            &limits(),
+            &contact,
+            &["ok".to_owned()],
+            None,
+            false,
+            Some("T1"),
+            "S1",
+        )
+        .await
+        .unwrap();
+        let frame = String::from_utf8(read_frame(&mut server, &limits()).await.unwrap()).unwrap();
+        assert!(!frame.contains("Private Name"));
+        assert!(!frame.contains("private@example.test"));
+        assert!(!frame.contains("authInfo"));
+        assert_eq!(response.xml, response.persisted_xml);
     }
 }

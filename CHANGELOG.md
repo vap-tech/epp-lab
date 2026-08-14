@@ -4,6 +4,17 @@
 
 ### Changed
 
+- Completed the remaining Contact protocol edges: duplicate creates map to
+  EPP `2302`, successful updates record the acting registrar, and
+  `contact:info` now returns RFC creation/update metadata, optional fax and
+  phone extensions.
+- Added the Stage 4 disclosure policy boundary. Client preferences are stored
+  at create time; non-sponsor `contact:info` requires valid authInfo, applies
+  disclosure and never returns the secret or persists an unredacted reply.
+- Added server-side Contacts paging and filters for registrar, status, search
+  and creation date, with matching TanStack Query URL state in the list UI.
+- Extended the EPP smoke client with Contact check, info, email update and
+  delete operations.
 - Made `ok` a derived Contact status for new objects and normalized legacy
   stored status rows at the EPP and Admin read boundaries.
 - Added EPP `2304` enforcement for Contact update/delete operations blocked by

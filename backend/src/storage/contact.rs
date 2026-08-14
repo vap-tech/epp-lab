@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use sqlx::PgPool;
+use sqlx::{PgPool, QueryBuilder};
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
@@ -37,6 +37,8 @@ pub(crate) struct ContactDetailRow {
     pub roid: String,
     pub sponsoring_registrar_id: Uuid,
     pub registrar_handle: Option<String>,
+    pub created_by_handle: Option<String>,
+    pub updated_by_handle: Option<String>,
     pub email: String,
     pub voice: String,
     pub voice_extension: Option<String>,
@@ -61,21 +63,75 @@ pub(crate) struct ContactDetailRow {
     pub statuses: Vec<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub transferred_at: Option<DateTime<Utc>>,
 }
 
-pub(crate) async fn list_summaries(pool: &PgPool) -> Result<Vec<ContactSummaryRow>, sqlx::Error> {
-    sqlx::query_as(
+pub(crate) struct ContactListQuery<'a> {
+    pub page: i64,
+    pub page_size: i64,
+    pub registrar_id: Option<Uuid>,
+    pub status: Option<&'a str>,
+    pub search: Option<&'a str>,
+    pub created_from: Option<DateTime<Utc>>,
+    pub created_to: Option<DateTime<Utc>>,
+}
+
+fn push_contact_filters<'a>(query: &mut QueryBuilder<'a, Postgres>, params: &ContactListQuery<'a>) {
+    if let Some(registrar_id) = params.registrar_id {
+        query
+            .push(" AND c.sponsoring_registrar_id = ")
+            .push_bind(registrar_id);
+    }
+    if let Some(status) = params.status {
+        query
+            .push(" AND EXISTS (SELECT 1 FROM contact_statuses cs WHERE cs.contact_id = c.id AND cs.status = ")
+            .push_bind(status)
+            .push(")");
+    }
+    if let Some(search) = params.search {
+        let pattern = format!("%{search}%");
+        query
+            .push(" AND (c.roid ILIKE ")
+            .push_bind(pattern.clone())
+            .push(" OR p.email ILIKE ")
+            .push_bind(pattern)
+            .push(")");
+    }
+    if let Some(created_from) = params.created_from {
+        query.push(" AND c.created_at >= ").push_bind(created_from);
+    }
+    if let Some(created_to) = params.created_to {
+        query.push(" AND c.created_at <= ").push_bind(created_to);
+    }
+}
+
+pub(crate) async fn list_summaries(
+    pool: &PgPool,
+    query_params: ContactListQuery<'_>,
+) -> Result<(Vec<ContactSummaryRow>, i64), sqlx::Error> {
+    let mut count = QueryBuilder::<Postgres>::new(
+        "SELECT COUNT(*) FROM contacts c JOIN contact_phones p ON p.contact_id = c.id WHERE TRUE",
+    );
+    push_contact_filters(&mut count, &query_params);
+    let total: i64 = count.build_query_scalar().fetch_one(pool).await?;
+
+    let mut query = QueryBuilder::<Postgres>::new(
         r#"SELECT c.id, c.roid, c.sponsoring_registrar_id, r.handle AS registrar_handle, p.email,
                   COALESCE(array_agg(DISTINCT s.status) FILTER (WHERE s.status IS NOT NULL), '{}') AS statuses,
                   c.created_at, c.updated_at
            FROM contacts c JOIN registrars r ON r.id = c.sponsoring_registrar_id
            JOIN contact_phones p ON p.contact_id = c.id
            LEFT JOIN contact_statuses s ON s.contact_id = c.id
-           GROUP BY c.id, c.roid, c.sponsoring_registrar_id, r.handle, p.email, c.created_at, c.updated_at
-           ORDER BY c.created_at DESC"#,
-    )
-    .fetch_all(pool)
-    .await
+        "#,
+    );
+    query.push(" WHERE TRUE");
+    push_contact_filters(&mut query, &query_params);
+    query.push(" GROUP BY c.id, c.roid, c.sponsoring_registrar_id, r.handle, p.email, c.created_at, c.updated_at ORDER BY c.created_at DESC LIMIT ")
+        .push_bind(query_params.page_size)
+        .push(" OFFSET ")
+        .push_bind((query_params.page - 1) * query_params.page_size);
+    let rows = query.build_query_as().fetch_all(pool).await?;
+    Ok((rows, total))
 }
 
 pub(crate) async fn find_detail(
@@ -84,6 +140,7 @@ pub(crate) async fn find_detail(
 ) -> Result<Option<ContactDetailRow>, sqlx::Error> {
     sqlx::query_as(
         r#"SELECT c.id, c.roid, c.sponsoring_registrar_id, r.handle AS registrar_handle,
+                  cr.handle AS created_by_handle, up.handle AS updated_by_handle,
                   p.email, p.voice, p.voice_extension, p.fax, p.fax_extension,
                   pi.name, pi.organization,
                   COALESCE((SELECT array_agg(ps.street ORDER BY ps.position) FROM contact_postal_streets ps WHERE ps.contact_id = c.id AND ps.info_type = 'international'), '{}') AS streets,
@@ -95,8 +152,10 @@ pub(crate) async fn find_detail(
                   c.disclose_flag,
                   COALESCE((SELECT array_agg(df.field ORDER BY df.field) FROM contact_disclosure_fields df WHERE df.contact_id = c.id), '{}') AS disclosure_fields,
                   COALESCE((SELECT array_agg(DISTINCT s.status) FROM contact_statuses s WHERE s.contact_id = c.id), '{}') AS statuses,
-                  c.created_at, c.updated_at
+                  c.created_at, c.updated_at, c.transferred_at
            FROM contacts c JOIN registrars r ON r.id = c.sponsoring_registrar_id
+           JOIN registrars cr ON cr.id = c.created_by
+           JOIN registrars up ON up.id = c.updated_by
            JOIN contact_phones p ON p.contact_id = c.id
            JOIN contact_postal_info pi ON pi.contact_id = c.id AND pi.info_type = 'international'
            LEFT JOIN contact_postal_info lpi ON lpi.contact_id = c.id AND lpi.info_type = 'localized'
@@ -156,13 +215,9 @@ pub(crate) async fn delete(pool: &PgPool, id: Uuid) -> Result<bool, sqlx::Error>
     Ok(result.rows_affected() == 1)
 }
 
-pub(crate) async fn has_client_status(
-    pool: &PgPool,
-    id: Uuid,
-    status: &str,
-) -> Result<bool, sqlx::Error> {
+pub(crate) async fn has_status(pool: &PgPool, id: Uuid, status: &str) -> Result<bool, sqlx::Error> {
     sqlx::query_scalar(
-        "SELECT EXISTS (SELECT 1 FROM contact_statuses WHERE contact_id = $1 AND status = $2 AND source = 'client')",
+        "SELECT EXISTS (SELECT 1 FROM contact_statuses WHERE contact_id = $1 AND status = $2)",
     )
     .bind(id)
     .bind(status)
@@ -172,6 +227,7 @@ pub(crate) async fn has_client_status(
 
 pub(crate) struct ContactUpdate<'a> {
     pub id: Uuid,
+    pub updated_by: Uuid,
     pub auth_info_ciphertext: Option<&'a str>,
     pub email: Option<&'a str>,
     pub voice: Option<&'a str>,
@@ -193,10 +249,11 @@ pub(crate) async fn apply_update(
     update: ContactUpdate<'_>,
 ) -> Result<bool, sqlx::Error> {
     let mut tx = pool.begin().await?;
-    let result = sqlx::query("UPDATE contacts SET auth_info_ciphertext = COALESCE($2, auth_info_ciphertext), disclose_flag = COALESCE($3, disclose_flag), updated_at = NOW() WHERE id = $1")
+    let result = sqlx::query("UPDATE contacts SET auth_info_ciphertext = COALESCE($2, auth_info_ciphertext), disclose_flag = COALESCE($3, disclose_flag), updated_by = $4, updated_at = NOW() WHERE id = $1")
         .bind(update.id)
         .bind(update.auth_info_ciphertext)
         .bind(update.disclose_flag)
+        .bind(update.updated_by)
         .execute(&mut *tx)
         .await?;
     if result.rows_affected() == 0 {
@@ -488,7 +545,7 @@ mod tests {
     #[ignore = "requires PostgreSQL; run through just test-with-db"]
     #[sqlx::test(migrations = "../backend/migrations")]
     async fn update_is_atomic_when_a_late_statement_fails(pool: PgPool) {
-        let (_, contact_id) = insert_test_contact(&pool).await;
+        let (registrar_id, contact_id) = insert_test_contact(&pool).await;
         let streets = ["New street"];
         let statuses = ["clientUpdateProhibited"];
         let fields = ["invalid"];
@@ -497,6 +554,7 @@ mod tests {
             &pool,
             ContactUpdate {
                 id: contact_id,
+                updated_by: registrar_id,
                 auth_info_ciphertext: Some("new-ciphertext"),
                 email: Some("new@example.test"),
                 voice: None,
@@ -553,7 +611,7 @@ mod tests {
     #[ignore = "requires PostgreSQL; run through just test-with-db"]
     #[sqlx::test(migrations = "../backend/migrations")]
     async fn update_clears_optional_contact_fields(pool: PgPool) {
-        let (_, contact_id) = insert_test_contact(&pool).await;
+        let (registrar_id, contact_id) = insert_test_contact(&pool).await;
         sqlx::query("UPDATE contact_phones SET fax = '+7.4950000000' WHERE contact_id = $1")
             .bind(contact_id)
             .execute(&pool)
@@ -571,6 +629,7 @@ mod tests {
             &pool,
             ContactUpdate {
                 id: contact_id,
+                updated_by: registrar_id,
                 auth_info_ciphertext: None,
                 email: None,
                 voice: None,

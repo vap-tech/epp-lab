@@ -30,6 +30,47 @@ pub(crate) enum ContactCreateError {
     Encryption(#[source] crate::security::SecretCipherError),
 }
 
+/// Stage 4's fixed disclosure policy accepts every RFC-valid preference.
+/// Keeping this decision at the application boundary makes later registry
+/// policy changes independent of the XML parser.
+fn contact_disclosure(
+    flag: Option<&str>,
+    fields: &[String],
+) -> Result<crate::domain::contact::DisclosurePreference, ContactCreateError> {
+    use crate::domain::contact::{DisclosureField, DisclosureFlag, DisclosurePreference};
+
+    let flag = match flag.unwrap_or("0") {
+        "0" => DisclosureFlag::Private,
+        "1" => DisclosureFlag::Public,
+        _ => {
+            return Err(ContactCreateError::InvalidData(
+                "invalid disclose flag".to_owned(),
+            ));
+        }
+    };
+    let mut parsed = std::collections::BTreeSet::new();
+    for field in fields {
+        let field = match field.as_str() {
+            "name" => DisclosureField::Name,
+            "organization" => DisclosureField::Organization,
+            "address" => DisclosureField::Address,
+            "voice" => DisclosureField::Voice,
+            "fax" => DisclosureField::Fax,
+            "email" => DisclosureField::Email,
+            _ => {
+                return Err(ContactCreateError::InvalidData(
+                    "invalid disclose field".to_owned(),
+                ));
+            }
+        };
+        parsed.insert(field);
+    }
+    Ok(DisclosurePreference {
+        flag,
+        fields: parsed,
+    })
+}
+
 #[allow(dead_code)]
 pub(crate) fn prepare_contact_create(
     command: &crate::epp::parser::ContactCreateCommand,
@@ -38,8 +79,8 @@ pub(crate) fn prepare_contact_create(
     now: DateTime<Utc>,
 ) -> Result<crate::domain::contact::Contact, ContactCreateError> {
     use crate::domain::contact::{
-        Contact, ContactId, ContactRoid, CountryCode, DisclosureFlag, DisclosurePreference,
-        EmailAddress, PhoneNumber, PostalAddress, PostalInfo, PostalInfoSet,
+        Contact, ContactId, ContactRoid, CountryCode, EmailAddress, PhoneNumber, PostalAddress,
+        PostalInfo, PostalInfoSet,
     };
     let auth_info = cipher
         .encrypt(command.auth_info.as_bytes())
@@ -93,10 +134,7 @@ pub(crate) fn prepare_contact_create(
         email: EmailAddress::parse(&command.email)
             .map_err(|error| ContactCreateError::InvalidData(error.to_string()))?,
         auth_info,
-        disclose: DisclosurePreference {
-            flag: DisclosureFlag::Private,
-            fields: Default::default(),
-        },
+        disclose: contact_disclosure(command.disclose_flag.as_deref(), &command.disclose_fields)?,
         client_statuses: Default::default(),
         // `ok` is derived when no stored status applies. A pending status
         // would claim an asynchronous lifecycle that does not exist.
@@ -288,6 +326,8 @@ mod tests {
             fax_extension: None,
             email: "a@example.test".into(),
             auth_info: "plain-auth-info".into(),
+            disclose_flag: None,
+            disclose_fields: vec![],
             localized: None,
         };
         let cipher = crate::security::AesGcmSecretCipher::from_hex(

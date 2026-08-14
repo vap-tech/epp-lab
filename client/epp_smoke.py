@@ -59,6 +59,32 @@ def command_xml(command: str, cl_trid: str, client_id: str | None = None, passwo
 <contact:voice>+70000000000</contact:voice><contact:email>contact@example.test</contact:email>
 <contact:authInfo><contact:pw>{auth_info}</contact:pw></contact:authInfo>
 </contact:create></create><clTRID>{cl_trid}</clTRID></command></epp>'''.encode()
+    if command == "contact:check":
+        contact_id = os.environ["EPP_CONTACT_ID"]
+        return f'''<?xml version="1.0"?>
+<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><check>
+<contact:check xmlns:contact="urn:ietf:params:xml:ns:contact-1.0"><contact:id>{contact_id}</contact:id></contact:check>
+</check><clTRID>{cl_trid}</clTRID></command></epp>'''.encode()
+    if command == "contact:info":
+        contact_id = os.environ["EPP_CONTACT_ID"]
+        return f'''<?xml version="1.0"?>
+<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><info>
+<contact:info xmlns:contact="urn:ietf:params:xml:ns:contact-1.0"><contact:id>{contact_id}</contact:id></contact:info>
+</info><clTRID>{cl_trid}</clTRID></command></epp>'''.encode()
+    if command == "contact:update":
+        contact_id = os.environ["EPP_CONTACT_ID"]
+        email = os.getenv("EPP_CONTACT_EMAIL", "updated-contact@example.test")
+        return f'''<?xml version="1.0"?>
+<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><update>
+<contact:update xmlns:contact="urn:ietf:params:xml:ns:contact-1.0"><contact:id>{contact_id}</contact:id>
+<contact:chg><contact:email>{email}</contact:email></contact:chg></contact:update>
+</update><clTRID>{cl_trid}</clTRID></command></epp>'''.encode()
+    if command == "contact:delete":
+        contact_id = os.environ["EPP_CONTACT_ID"]
+        return f'''<?xml version="1.0"?>
+<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><delete>
+<contact:delete xmlns:contact="urn:ietf:params:xml:ns:contact-1.0"><contact:id>{contact_id}</contact:id></contact:delete>
+</delete><clTRID>{cl_trid}</clTRID></command></epp>'''.encode()
     raise ValueError(f"unsupported command: {command}")
 
 
@@ -72,6 +98,10 @@ def main() -> None:
     parser.add_argument("--wrong-password", action="store_true")
     parser.add_argument("--wrong-client-id", action="store_true")
     parser.add_argument("--create-contact", action="store_true")
+    parser.add_argument("--check-contact", action="store_true")
+    parser.add_argument("--info-contact", action="store_true")
+    parser.add_argument("--update-contact-email", action="store_true")
+    parser.add_argument("--delete-contact", action="store_true")
     args = parser.parse_args()
     if not args.ca or not args.cert or not args.key:
         parser.error("provide --ca, --cert and --key or corresponding environment variables")
@@ -107,16 +137,27 @@ def main() -> None:
                 if command == "login" and expected != "1000":
                     return
 
+            contact_commands = []
             if args.create_contact:
+                contact_commands.append("contact:create")
+            if args.check_contact:
+                contact_commands.append("contact:check")
+            if args.info_contact:
+                contact_commands.append("contact:info")
+            if args.update_contact_email:
+                contact_commands.append("contact:update")
+            if args.delete_contact:
+                contact_commands.append("contact:delete")
+            for command in contact_commands:
                 trid = f"client-{uuid.uuid4()}"
-                sock.sendall(frame(command_xml("contact:create", trid)))
+                sock.sendall(frame(command_xml(command, trid)))
                 response = read_frame(sock)
                 root = ElementTree.fromstring(response)
                 result = root.find(".//{urn:ietf:params:xml:ns:epp-1.0}result")
                 code = result.attrib["code"] if result is not None else "unknown"
-                print(f"contact:create: {code}")
+                print(f"{command}: {code}")
                 if code != "1000":
-                    raise RuntimeError(f"contact:create failed with EPP code {code}")
+                    raise RuntimeError(f"{command} failed with EPP code {code}")
 
             trid = f"client-{uuid.uuid4()}"
             sock.sendall(frame(command_xml("logout", trid)))

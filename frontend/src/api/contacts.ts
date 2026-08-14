@@ -42,8 +42,28 @@ const contactSchema = z.object({
 
 export type Contact = z.infer<typeof contactSchema>
 
-export async function getContacts() {
-  return z.array(contactSchema).parse(await api.get<Contact[]>("/contacts"))
+const contactPageSchema = z.object({
+  items: z.array(contactSchema),
+  page: z.number(),
+  page_size: z.number(),
+  total: z.number(),
+  total_pages: z.number(),
+})
+
+export type ContactFilters = {
+  registrar_id?: string
+  status?: string
+  search?: string
+}
+
+export async function getContacts(page = 1, filters: ContactFilters = {}) {
+  const params = new URLSearchParams({ page: String(page), page_size: "50" })
+  for (const [key, value] of Object.entries(filters)) {
+    if (value) params.set(key, value)
+  }
+  return contactPageSchema.parse(
+    await api.get(`/contacts?${params.toString()}`),
+  )
 }
 
 export async function getContact(id: string) {

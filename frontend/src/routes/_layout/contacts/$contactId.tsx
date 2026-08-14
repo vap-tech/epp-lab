@@ -22,6 +22,7 @@ function ContactDetail() {
       <div>
         <Link
           to="/contacts"
+          search={{ page: 1 }}
           className="text-sm text-muted-foreground hover:underline"
         >
           ← Contacts

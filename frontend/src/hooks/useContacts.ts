@@ -1,11 +1,24 @@
 import { useQuery } from "@tanstack/react-query"
 
-import { getContact, getContacts } from "@/api/contacts"
+import { getContact, getContacts, type ContactFilters } from "@/api/contacts"
 
-export function useContacts() {
-  return useQuery({ queryKey: ["contacts"], queryFn: getContacts })
+export const contactKeys = {
+  all: ["contacts"] as const,
+  list: (page: number, filters: ContactFilters) =>
+    [...contactKeys.all, "list", page, filters] as const,
+  detail: (id: string) => [...contactKeys.all, "detail", id] as const,
+}
+
+export function useContacts(page = 1, filters: ContactFilters = {}) {
+  return useQuery({
+    queryKey: contactKeys.list(page, filters),
+    queryFn: () => getContacts(page, filters),
+  })
 }
 
 export function useContact(id: string) {
-  return useQuery({ queryKey: ["contact", id], queryFn: () => getContact(id) })
+  return useQuery({
+    queryKey: contactKeys.detail(id),
+    queryFn: () => getContact(id),
+  })
 }
