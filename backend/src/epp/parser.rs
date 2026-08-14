@@ -223,6 +223,19 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
             }
             Ok(Event::Empty(event)) => {
                 let name = event.name().as_ref().to_vec();
+                if name.ends_with(b"status")
+                    && let Some(status) = event
+                        .attributes()
+                        .flatten()
+                        .find(|attribute| attribute.key.as_ref() == b"s")
+                        .and_then(|attribute| attribute.unescape_value().ok())
+                {
+                    if path.iter().any(|part| part.ends_with(b"add")) {
+                        contact_add_statuses.push(status.into_owned());
+                    } else if path.iter().any(|part| part.ends_with(b"rem")) {
+                        contact_rem_statuses.push(status.into_owned());
+                    }
+                }
                 if name.ends_with(b"hello") {
                     command = Some(EppCommand::Hello);
                 } else if name.ends_with(b"logout") {
@@ -544,6 +557,19 @@ mod tests {
         )
         .unwrap();
         assert!(!redacted.contains("new-secret"));
+    }
+
+    #[test]
+    fn parses_contact_update_client_status_add_and_rem() {
+        let parsed = parse_command(
+            br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><update xmlns:contact="urn:ietf:params:xml:ns:contact-1.0"><contact:update><contact:id>C123</contact:id><contact:add><contact:status s="clientUpdateProhibited"/></contact:add><contact:rem><contact:status s="clientDeleteProhibited"/></contact:rem></contact:update></update></command></epp>"#,
+        )
+        .unwrap();
+        let EppCommand::Contact(ContactCommand::Update(update)) = parsed.command else {
+            panic!("expected contact update");
+        };
+        assert_eq!(update.add_statuses, vec!["clientUpdateProhibited"]);
+        assert_eq!(update.rem_statuses, vec!["clientDeleteProhibited"]);
     }
 
     #[test]
