@@ -41,6 +41,18 @@ pub(crate) struct ContactDetail {
     pub fax_extension: Option<String>,
     pub disclose_flag: String,
     pub disclosure_fields: Vec<String>,
+    pub localized_postal_info: Option<ContactPostalInfo>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ContactPostalInfo {
+    pub name: String,
+    pub organization: Option<String>,
+    pub streets: Vec<String>,
+    pub city: String,
+    pub state_province: Option<String>,
+    pub postal_code: Option<String>,
+    pub country_code: String,
 }
 
 pub(crate) async fn list(
@@ -111,6 +123,15 @@ impl From<crate::storage::contact::ContactDetailRow> for ContactDetail {
             fax_extension: row.fax_extension,
             disclose_flag: row.disclose_flag,
             disclosure_fields: row.disclosure_fields,
+            localized_postal_info: row.localized_name.map(|name| ContactPostalInfo {
+                name,
+                organization: row.localized_organization,
+                streets: row.localized_streets,
+                city: row.localized_city.unwrap_or_default(),
+                state_province: row.localized_state_province,
+                postal_code: row.localized_postal_code,
+                country_code: row.localized_country_code.unwrap_or_default(),
+            }),
         }
     }
 }

@@ -238,6 +238,14 @@ impl Contact {
             .address
             .validate()
             .map_err(ContactValidationError::InvalidField)?;
+        if let Some(localized) = &self.postal_info.localized {
+            required(&localized.name, "localized postal name")
+                .map_err(ContactValidationError::InvalidField)?;
+            localized
+                .address
+                .validate()
+                .map_err(ContactValidationError::InvalidField)?;
+        }
         self.voice
             .validate()
             .map_err(ContactValidationError::InvalidField)?;

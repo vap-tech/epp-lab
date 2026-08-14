@@ -74,6 +74,18 @@ pub(crate) struct ContactCreateCommand {
     pub fax_extension: Option<String>,
     pub email: String,
     pub auth_info: String,
+    pub localized: Option<ContactPostalInfoCommand>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct ContactPostalInfoCommand {
+    pub name: String,
+    pub organization: Option<String>,
+    pub streets: Vec<String>,
+    pub city: String,
+    pub state_province: Option<String>,
+    pub postal_code: Option<String>,
+    pub country_code: String,
 }
 
 impl EppCommand {
@@ -138,6 +150,9 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
     let mut contact_ids = Vec::new();
     let mut contact_create_values = std::collections::BTreeMap::new();
     let mut contact_streets = Vec::new();
+    let mut contact_localized_values = std::collections::BTreeMap::new();
+    let mut contact_localized_streets = Vec::new();
+    let mut postal_info_type: Option<String> = None;
     let mut contact_add_statuses = Vec::new();
     let mut contact_rem_statuses = Vec::new();
     let mut contact_disclose_fields = Vec::new();
@@ -210,6 +225,7 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                             fax_extension: None,
                             email: String::new(),
                             auth_info: String::new(),
+                            localized: None,
                         },
                     )));
                 } else if name.ends_with(b"info") {
@@ -240,6 +256,14 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                     command = Some(EppCommand::Contact(ContactCommand::Delete(
                         ContactDeleteCommand { id: String::new() },
                     )));
+                }
+                if name.ends_with(b"postalInfo") {
+                    postal_info_type = event
+                        .attributes()
+                        .flatten()
+                        .find(|attribute| attribute.key.as_ref() == b"type")
+                        .and_then(|attribute| attribute.unescape_value().ok())
+                        .map(|value| value.into_owned());
                 }
                 path.push(name);
             }
@@ -318,24 +342,48 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                     Some(name) if name.ends_with(b"objURI") => object_uris.push(value),
                     Some(name) if name.ends_with(b"extURI") => extension_uris.push(value),
                     Some(name) if name.ends_with(b"id") => contact_ids.push(value),
-                    Some(name) if name.ends_with(b"name") => {
-                        contact_create_values.insert("name", value);
-                    }
-                    Some(name) if name.ends_with(b"org") => {
-                        contact_create_values.insert("org", value);
-                    }
-                    Some(name) if name.ends_with(b"city") => {
-                        contact_create_values.insert("city", value);
-                    }
-                    Some(name) if name.ends_with(b"sp") => {
-                        contact_create_values.insert("sp", value);
-                    }
-                    Some(name) if name.ends_with(b"pc") => {
-                        contact_create_values.insert("pc", value);
-                    }
-                    Some(name) if name.ends_with(b"cc") => {
-                        contact_create_values.insert("cc", value);
-                    }
+                    Some(name) if name.ends_with(b"name") => postal_values(
+                        &mut contact_create_values,
+                        &mut contact_localized_values,
+                        postal_info_type.as_deref(),
+                        "name",
+                        value,
+                    ),
+                    Some(name) if name.ends_with(b"org") => postal_values(
+                        &mut contact_create_values,
+                        &mut contact_localized_values,
+                        postal_info_type.as_deref(),
+                        "org",
+                        value,
+                    ),
+                    Some(name) if name.ends_with(b"city") => postal_values(
+                        &mut contact_create_values,
+                        &mut contact_localized_values,
+                        postal_info_type.as_deref(),
+                        "city",
+                        value,
+                    ),
+                    Some(name) if name.ends_with(b"sp") => postal_values(
+                        &mut contact_create_values,
+                        &mut contact_localized_values,
+                        postal_info_type.as_deref(),
+                        "sp",
+                        value,
+                    ),
+                    Some(name) if name.ends_with(b"pc") => postal_values(
+                        &mut contact_create_values,
+                        &mut contact_localized_values,
+                        postal_info_type.as_deref(),
+                        "pc",
+                        value,
+                    ),
+                    Some(name) if name.ends_with(b"cc") => postal_values(
+                        &mut contact_create_values,
+                        &mut contact_localized_values,
+                        postal_info_type.as_deref(),
+                        "cc",
+                        value,
+                    ),
                     Some(name) if name.ends_with(b"voice") => {
                         contact_create_values.insert("voice", value);
                     }
@@ -348,7 +396,13 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                     Some(name) if name.ends_with(b"email") => {
                         contact_create_values.insert("email", value);
                     }
-                    Some(name) if name.ends_with(b"street") => contact_streets.push(value),
+                    Some(name) if name.ends_with(b"street") => {
+                        if postal_info_type.as_deref() == Some("loc") {
+                            contact_localized_streets.push(value);
+                        } else {
+                            contact_streets.push(value);
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -372,6 +426,9 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                     {
                         contact_clear_fields.push(field);
                     }
+                }
+                if name.ends_with(b"postalInfo") {
+                    postal_info_type = None;
                 }
                 path.pop();
             }
@@ -438,6 +495,23 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
             create.auth_info = contact_create_values
                 .remove("pw")
                 .ok_or(ParseError::Command)?;
+            if !contact_localized_values.is_empty() || !contact_localized_streets.is_empty() {
+                create.localized = Some(ContactPostalInfoCommand {
+                    name: contact_localized_values
+                        .remove("name")
+                        .ok_or(ParseError::Command)?,
+                    organization: contact_localized_values.remove("org"),
+                    streets: contact_localized_streets,
+                    city: contact_localized_values
+                        .remove("city")
+                        .ok_or(ParseError::Command)?,
+                    state_province: contact_localized_values.remove("sp"),
+                    postal_code: contact_localized_values.remove("pc"),
+                    country_code: contact_localized_values
+                        .remove("cc")
+                        .ok_or(ParseError::Command)?,
+                });
+            }
             Ok(ParsedCommand {
                 command: EppCommand::Contact(ContactCommand::Create(create)),
                 cl_trid,
@@ -505,6 +579,20 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
         }
         None if xml.windows(9).any(|window| window == b"<command>") => Err(ParseError::Unsupported),
         None => Err(ParseError::Command),
+    }
+}
+
+fn postal_values(
+    international: &mut std::collections::BTreeMap<&'static str, String>,
+    localized: &mut std::collections::BTreeMap<&'static str, String>,
+    postal_info_type: Option<&str>,
+    key: &'static str,
+    value: String,
+) {
+    if postal_info_type == Some("loc") {
+        localized.insert(key, value);
+    } else {
+        international.insert(key, value);
     }
 }
 
@@ -647,6 +735,21 @@ mod tests {
                 chg_disclose_fields: vec![],
             }))
         );
+    }
+
+    #[test]
+    fn parses_localized_postal_info_in_contact_create() {
+        let parsed = parse_command(
+            r#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><create><contact:create xmlns:contact="urn:ietf:params:xml:ns:contact-1.0"><contact:id>C123</contact:id><contact:postalInfo type="int"><contact:name>International Name</contact:name><contact:addr><contact:street>Main 1</contact:street><contact:city>Moscow</contact:city><contact:cc>RU</contact:cc></contact:addr></contact:postalInfo><contact:postalInfo type="loc"><contact:name>Локальное имя</contact:name><contact:org>Компания</contact:org><contact:addr><contact:street>Улица 1</contact:street><contact:city>Москва</contact:city><contact:cc>RU</contact:cc></contact:addr></contact:postalInfo><contact:voice>+70000000000</contact:voice><contact:email>contact@example.test</contact:email><contact:authInfo><contact:pw>secret</contact:pw></contact:authInfo></contact:create></create></command></epp>"#.as_bytes(),
+        )
+        .unwrap();
+        let EppCommand::Contact(ContactCommand::Create(create)) = parsed.command else {
+            panic!("expected contact:create");
+        };
+        let localized = create.localized.expect("localized postal info");
+        assert_eq!(localized.name, "Локальное имя");
+        assert_eq!(localized.organization.as_deref(), Some("Компания"));
+        assert_eq!(localized.streets, ["Улица 1"]);
     }
 
     #[test]

@@ -171,8 +171,51 @@ where
         .iter()
         .map(|status| format!(r#"<contact:status s="{}"/>"#, escape_xml(status)))
         .collect::<String>();
+    let localized_postal_info = contact
+        .localized_name
+        .as_ref()
+        .map(|name| {
+            let streets = contact
+                .localized_streets
+                .iter()
+                .map(|street| format!("<contact:street>{}</contact:street>", escape_xml(street)))
+                .collect::<String>();
+            format!(
+                "<contact:postalInfo type=\"loc\"><contact:name>{}</contact:name>{}<contact:addr>{}{}{}<contact:city>{}</contact:city><contact:cc>{}</contact:cc></contact:addr></contact:postalInfo>",
+                escape_xml(name),
+                contact.localized_organization.as_deref().map(|organization| format!("<contact:org>{}</contact:org>", escape_xml(organization))).unwrap_or_default(),
+                streets,
+                contact.localized_state_province.as_deref().map(|state_province| format!("<contact:sp>{}</contact:sp>", escape_xml(state_province))).unwrap_or_default(),
+                contact.localized_postal_code.as_deref().map(|postal_code| format!("<contact:pc>{}</contact:pc>", escape_xml(postal_code))).unwrap_or_default(),
+                escape_xml(contact.localized_city.as_deref().unwrap_or_default()),
+                escape_xml(contact.localized_country_code.as_deref().unwrap_or_default()),
+            )
+        })
+        .unwrap_or_default();
+    let disclose_fields = contact
+        .disclosure_fields
+        .iter()
+        .filter_map(|field| match field.as_str() {
+            "name" => Some("name"),
+            "organization" => Some("org"),
+            "address" => Some("addr"),
+            "voice" => Some("voice"),
+            "fax" => Some("fax"),
+            "email" => Some("email"),
+            _ => None,
+        })
+        .map(|field| format!("<contact:{field}/>"))
+        .collect::<String>();
+    let disclose = format!(
+        r#"<contact:disclose flag="{}">{disclose_fields}</contact:disclose>"#,
+        if contact.disclose_flag == "public" {
+            "1"
+        } else {
+            "0"
+        }
+    );
     let wire = format!(
-        r#"<?xml version="1.0" encoding="UTF-8"?><epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><response><result code="1000"><msg>Command completed successfully</msg></result><resData><contact:infData xmlns:contact="urn:ietf:params:xml:ns:contact-1.0"><contact:id>{}</contact:id><contact:roid>{}</contact:roid>{}<contact:postalInfo type="int"><contact:name>{}</contact:name>{}<contact:addr>{}<contact:city>{}</contact:city><contact:cc>{}</contact:cc></contact:addr></contact:postalInfo><contact:voice>{}</contact:voice><contact:email>{}</contact:email><contact:authInfo><contact:pw>{}</contact:pw></contact:authInfo><contact:crDate>{}</contact:crDate><contact:upDate>{}</contact:upDate></contact:infData></resData>{}<svTRID>{}</svTRID></response></epp>"#,
+        r#"<?xml version="1.0" encoding="UTF-8"?><epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><response><result code="1000"><msg>Command completed successfully</msg></result><resData><contact:infData xmlns:contact="urn:ietf:params:xml:ns:contact-1.0"><contact:id>{}</contact:id><contact:roid>{}</contact:roid>{}<contact:postalInfo type="int"><contact:name>{}</contact:name>{}<contact:addr>{}<contact:city>{}</contact:city><contact:cc>{}</contact:cc></contact:addr></contact:postalInfo>{}<contact:voice>{}</contact:voice><contact:email>{}</contact:email>{}<contact:authInfo><contact:pw>{}</contact:pw></contact:authInfo><contact:crDate>{}</contact:crDate><contact:upDate>{}</contact:upDate></contact:infData></resData>{}<svTRID>{}</svTRID></response></epp>"#,
         escape_xml(&contact.roid),
         escape_xml(&contact.roid),
         statuses,
@@ -185,8 +228,10 @@ where
         streets,
         escape_xml(&contact.city),
         escape_xml(&contact.country_code),
+        localized_postal_info,
         escape_xml(&contact.voice),
         escape_xml(&contact.email),
+        disclose,
         escape_xml(auth_info),
         contact.created_at.to_rfc3339(),
         contact.updated_at.to_rfc3339(),
@@ -291,8 +336,15 @@ mod tests {
             state_province: None,
             postal_code: None,
             country_code: "RU".into(),
-            disclose_flag: "private".into(),
-            disclosure_fields: vec![],
+            localized_name: Some("Локальное имя".into()),
+            localized_organization: Some("Компания".into()),
+            localized_streets: vec!["Улица 1".into()],
+            localized_city: Some("Москва".into()),
+            localized_state_province: None,
+            localized_postal_code: None,
+            localized_country_code: Some("RU".into()),
+            disclose_flag: "public".into(),
+            disclosure_fields: vec!["email".into()],
             statuses: vec!["ok".into()],
             created_at: now,
             updated_at: now,
@@ -311,6 +363,10 @@ mod tests {
         let frame = String::from_utf8(read_frame(&mut server, &limits()).await.unwrap()).unwrap();
         assert!(frame.contains("secret-auth"));
         assert!(response.xml.contains("secret-auth"));
+        assert!(response.xml.contains(r#"<contact:postalInfo type="loc">"#));
+        assert!(response.xml.contains("Локальное имя"));
+        assert!(response.xml.contains(r#"<contact:disclose flag="1">"#));
+        assert!(response.xml.contains("<contact:email/>"));
         assert!(!response.persisted_xml.contains("secret-auth"));
         assert!(response.persisted_xml.contains("REDACTED"));
     }

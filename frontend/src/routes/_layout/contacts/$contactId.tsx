@@ -82,6 +82,32 @@ function ContactDetail() {
           </div>
         </dl>
       </div>
+      {item.localized_postal_info ? (
+        <div className="rounded-xl border p-6">
+          <h2 className="font-semibold">Localized postal info</h2>
+          <dl className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div>
+              <dt className="text-sm text-muted-foreground">Name</dt>
+              <dd>{item.localized_postal_info.name}</dd>
+            </div>
+            <div>
+              <dt className="text-sm text-muted-foreground">Organization</dt>
+              <dd>{item.localized_postal_info.organization ?? "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-sm text-muted-foreground">Address</dt>
+              <dd>
+                {item.localized_postal_info.streets.join(", ")},{" "}
+                {item.localized_postal_info.city}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-sm text-muted-foreground">Country</dt>
+              <dd>{item.localized_postal_info.country_code}</dd>
+            </div>
+          </dl>
+        </div>
+      ) : null}
       <div className="rounded-xl border p-6">
         <h2 className="font-semibold">Communication</h2>
         <dl className="mt-4 grid gap-4 sm:grid-cols-2">

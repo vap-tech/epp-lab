@@ -52,6 +52,24 @@ pub(crate) fn prepare_contact_create(
         country_code: CountryCode::parse(&command.country_code)
             .map_err(|error| ContactCreateError::InvalidData(error.to_string()))?,
     };
+    let localized = command
+        .localized
+        .as_ref()
+        .map(|postal| {
+            Ok(PostalInfo {
+                name: postal.name.clone(),
+                organization: postal.organization.clone(),
+                address: PostalAddress {
+                    streets: postal.streets.clone(),
+                    city: postal.city.clone(),
+                    state_province: postal.state_province.clone(),
+                    postal_code: postal.postal_code.clone(),
+                    country_code: CountryCode::parse(&postal.country_code)
+                        .map_err(|error| ContactCreateError::InvalidData(error.to_string()))?,
+                },
+            })
+        })
+        .transpose()?;
     let contact = Contact {
         id: ContactId::new(uuid::Uuid::new_v4()),
         roid: ContactRoid::parse(&command.id)
@@ -62,7 +80,7 @@ pub(crate) fn prepare_contact_create(
                 organization: command.organization.clone(),
                 address,
             },
-            localized: None,
+            localized,
         },
         voice: PhoneNumber {
             number: command.voice.clone(),
@@ -270,6 +288,7 @@ mod tests {
             fax_extension: None,
             email: "a@example.test".into(),
             auth_info: "plain-auth-info".into(),
+            localized: None,
         };
         let cipher = crate::security::AesGcmSecretCipher::from_hex(
             "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",

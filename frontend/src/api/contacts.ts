@@ -26,6 +26,18 @@ const contactSchema = z.object({
   fax_extension: z.string().nullable().optional(),
   disclose_flag: z.string().optional(),
   disclosure_fields: z.array(z.string()).optional(),
+  localized_postal_info: z
+    .object({
+      name: z.string(),
+      organization: z.string().nullable(),
+      streets: z.array(z.string()),
+      city: z.string(),
+      state_province: z.string().nullable(),
+      postal_code: z.string().nullable(),
+      country_code: z.string(),
+    })
+    .nullable()
+    .optional(),
 })
 
 export type Contact = z.infer<typeof contactSchema>

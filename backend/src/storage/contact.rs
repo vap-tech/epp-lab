@@ -49,6 +49,13 @@ pub(crate) struct ContactDetailRow {
     pub state_province: Option<String>,
     pub postal_code: Option<String>,
     pub country_code: String,
+    pub localized_name: Option<String>,
+    pub localized_organization: Option<String>,
+    pub localized_streets: Vec<String>,
+    pub localized_city: Option<String>,
+    pub localized_state_province: Option<String>,
+    pub localized_postal_code: Option<String>,
+    pub localized_country_code: Option<String>,
     pub disclose_flag: String,
     pub disclosure_fields: Vec<String>,
     pub statuses: Vec<String>,
@@ -81,6 +88,10 @@ pub(crate) async fn find_detail(
                   pi.name, pi.organization,
                   COALESCE((SELECT array_agg(ps.street ORDER BY ps.position) FROM contact_postal_streets ps WHERE ps.contact_id = c.id AND ps.info_type = 'international'), '{}') AS streets,
                   pi.city, pi.state_province, pi.postal_code, pi.country_code,
+                  lpi.name AS localized_name, lpi.organization AS localized_organization,
+                  COALESCE((SELECT array_agg(ps.street ORDER BY ps.position) FROM contact_postal_streets ps WHERE ps.contact_id = c.id AND ps.info_type = 'localized'), '{}') AS localized_streets,
+                  lpi.city AS localized_city, lpi.state_province AS localized_state_province,
+                  lpi.postal_code AS localized_postal_code, lpi.country_code AS localized_country_code,
                   c.disclose_flag,
                   COALESCE((SELECT array_agg(df.field ORDER BY df.field) FROM contact_disclosure_fields df WHERE df.contact_id = c.id), '{}') AS disclosure_fields,
                   COALESCE((SELECT array_agg(DISTINCT s.status) FROM contact_statuses s WHERE s.contact_id = c.id), '{}') AS statuses,
@@ -88,6 +99,7 @@ pub(crate) async fn find_detail(
            FROM contacts c JOIN registrars r ON r.id = c.sponsoring_registrar_id
            JOIN contact_phones p ON p.contact_id = c.id
            JOIN contact_postal_info pi ON pi.contact_id = c.id AND pi.info_type = 'international'
+           LEFT JOIN contact_postal_info lpi ON lpi.contact_id = c.id AND lpi.info_type = 'localized'
            WHERE c.id = $1"#,
     )
     .bind(id)
@@ -594,5 +606,31 @@ mod tests {
 
         assert_eq!(fax, None);
         assert_eq!(row, (None, None, None));
+    }
+
+    #[ignore = "requires PostgreSQL; run through just test-with-db"]
+    #[sqlx::test(migrations = "../backend/migrations")]
+    async fn reads_localized_postal_info(pool: PgPool) {
+        let (_, contact_id) = insert_test_contact(&pool).await;
+        sqlx::query(
+            "INSERT INTO contact_postal_info (contact_id, info_type, name, organization, city, country_code) VALUES ($1, 'localized', 'Локальное имя', 'Компания', 'Москва', 'RU')",
+        )
+        .bind(contact_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO contact_postal_streets (contact_id, info_type, position, street) VALUES ($1, 'localized', 1, 'Улица 1')",
+        )
+        .bind(contact_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let contact = find_detail(&pool, contact_id).await.unwrap().unwrap();
+        assert_eq!(contact.localized_name.as_deref(), Some("Локальное имя"));
+        assert_eq!(contact.localized_organization.as_deref(), Some("Компания"));
+        assert_eq!(contact.localized_streets, ["Улица 1"]);
+        assert_eq!(contact.localized_city.as_deref(), Some("Москва"));
     }
 }

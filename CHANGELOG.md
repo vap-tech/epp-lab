@@ -10,6 +10,10 @@
   `clientUpdateProhibited` or `clientDeleteProhibited`.
 - Added the Contact association lookup boundary and reserved the correct EPP
   `2305` path for future active Domain/Host references.
+- Added RFC 5733 localized (`loc`) postalInfo parsing, aggregate validation,
+  persistence reads, EPP info rendering and read-only Admin detail display.
+- Added `contact:disclose` rendering to EPP info responses from the persisted
+  disclosure preference.
 - Completed optional Contact update clearing for fax, organization,
   state/province and postal code; empty XML elements now become SQL `NULL`.
 - Added PostgreSQL coverage for both atomic Contact update rollback and
