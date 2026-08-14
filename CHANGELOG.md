@@ -6,6 +6,8 @@
 
 - Added an AES-256-GCM SecretCipher boundary with random nonces and
   authentication-failure handling for future encrypted Contact authInfo.
+- Added optional `CONTACT_AUTHINFO_KEY_HEX` configuration validation and
+  injected the cipher into application state without persisting the key.
 - Added the initial RFC 5733 Contact domain foundation with validated
   identities, postal data, phone/email values, statuses and disclosure types.
 - Added PostgreSQL-backed Admin API integration tests and a dedicated test

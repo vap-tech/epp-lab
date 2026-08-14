@@ -12,6 +12,8 @@ pub(crate) struct AppState {
     pub db: PgPool,
     pub settings: Settings,
     pub extension_registry: Arc<crate::domain::extension::ExtensionRegistry>,
+    #[allow(dead_code)]
+    pub contact_authinfo_cipher: Option<Arc<dyn crate::security::SecretCipher>>,
 }
 
 pub(crate) async fn build_state(settings: Settings) -> Result<Arc<AppState>> {
@@ -24,9 +26,17 @@ pub(crate) async fn build_state(settings: Settings) -> Result<Arc<AppState>> {
         .run(&db)
         .await
         .context("failed to run migrations")?;
+    let contact_authinfo_cipher = settings
+        .contact_authinfo_key_hex
+        .as_deref()
+        .map(crate::security::AesGcmSecretCipher::from_hex)
+        .transpose()
+        .context("invalid CONTACT_AUTHINFO_KEY_HEX")?
+        .map(|cipher| Arc::new(cipher) as Arc<dyn crate::security::SecretCipher>);
     Ok(Arc::new(AppState {
         db,
         settings,
         extension_registry: Arc::new(crate::domain::extension::ExtensionRegistry::empty()),
+        contact_authinfo_cipher,
     }))
 }

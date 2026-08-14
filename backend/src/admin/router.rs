@@ -119,6 +119,7 @@ mod tests {
             epp_tls_cert: String::new(),
             epp_tls_key: String::new(),
             epp_client_ca: String::new(),
+            contact_authinfo_key_hex: None,
             epp_read_timeout: Duration::from_secs(1),
             epp_tls_handshake_timeout: Duration::from_secs(1),
             epp_write_timeout: Duration::from_secs(1),
@@ -138,6 +139,7 @@ mod tests {
             db: pool,
             settings: settings(),
             extension_registry: Arc::new(ExtensionRegistry::empty()),
+            contact_authinfo_cipher: None,
         });
         router(state)
             .oneshot(
