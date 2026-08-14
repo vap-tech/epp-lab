@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: epp_lab
+      POSTGRES_USER: epp_lab
+      POSTGRES_PASSWORD: epp_lab
+    ports:
+      - "5433:5432"
+    volumes:
+      - epp_lab_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U epp_lab -d epp_lab"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  epp_lab_postgres_data:
