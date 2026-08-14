@@ -1,10 +1,11 @@
 use axum::{Json, extract::State, http::StatusCode};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::{
     admin::auth::AdminSession,
+    admin::auth::CsrfProtected,
     app::AppState,
     storage::zone::{self, ZoneRow},
 };
@@ -70,6 +71,44 @@ pub(crate) async fn list(
         .map(ZoneResponse::try_from)
         .collect::<Result<Vec<_>, _>>()
         .map(Json)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct CreateZoneRequest {
+    pub name: String,
+}
+
+pub(crate) async fn create(
+    _session: AdminSession,
+    _csrf: CsrfProtected,
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<CreateZoneRequest>,
+) -> Result<(StatusCode, Json<ZoneResponse>), StatusCode> {
+    let name = crate::domain::zone::ZoneName::parse(request.name.trim())
+        .map_err(|_| StatusCode::BAD_REQUEST)?;
+    let zone = crate::domain::zone::Zone {
+        id: crate::domain::zone::ZoneId::new(Uuid::new_v4()),
+        name,
+        status: crate::domain::zone::ZoneStatus::Active,
+        contact_policy: Default::default(),
+    };
+    zone::create(&state.db, &zone, chrono::Utc::now())
+        .await
+        .map_err(|error| match error {
+            sqlx::Error::Database(database_error)
+                if database_error.constraint() == Some("zones_ascii_name_key") =>
+            {
+                StatusCode::CONFLICT
+            }
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        })?;
+    let row = zone::find(&state.db, zone.id.into_uuid())
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+    ZoneResponse::try_from(row)
+        .map(|response| (StatusCode::CREATED, Json(response)))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 

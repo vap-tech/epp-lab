@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Added CSRF-protected `POST /api/zones` with IDNA validation, explicit
+  defaults and atomic Zone/contact-policy creation.
 - Added the authenticated read-only `GET /api/zones` endpoint with explicit
   Zone and contact policy DTOs.
 - Added SQLx persistence operations for listing and toggling zone extension
