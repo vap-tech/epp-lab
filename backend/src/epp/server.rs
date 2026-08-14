@@ -97,19 +97,16 @@ async fn handle_connection(
             .await
             .map_err(|_| super::framing::FrameError::Timeout)?
             .map_err(|error| super::framing::FrameError::Tls(io::Error::other(error)))?;
-    let extension_uris = match crate::application::advertised_extension_uris(
-        &db,
-        &extension_registry,
-    )
-    .await
-    {
-        Ok(uris) if !uris.is_empty() || extension_registry.list().next().is_some() => uris,
-        Ok(_) => extension_uris,
-        Err(error) => {
-            tracing::warn!(%error, "failed to calculate zone extension capabilities; using configured EPP extensions");
-            extension_uris
-        }
-    };
+    let extension_uris =
+        match crate::application::advertised_extension_uris(&db, &extension_registry).await {
+            Ok(uris) if !uris.is_empty() || extension_registry.list().next().is_some() => uris,
+            Ok(_) => extension_uris,
+            Err(error) => {
+                return Err(super::framing::FrameError::Write(io::Error::other(
+                    format!("failed to calculate EPP capabilities: {error}"),
+                )));
+            }
+        };
     let peer_certificate = stream
         .get_ref()
         .1
