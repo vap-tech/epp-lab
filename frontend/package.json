@@ -40,9 +40,11 @@
     "react-dom": "^19.2.8",
     "react-error-boundary": "^6.1.2",
     "react-hook-form": "^7.84.0",
+    "shiki": "^4.4.3",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.2.1",
+    "xml-formatter": "^3.7.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

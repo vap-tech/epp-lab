@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Added a reusable EPP XML viewer with pretty/raw modes, wrapping, original
+  XML copy, theme-aware Shiki highlighting, and safe formatting fallbacks.
 - Added read-only EPP Sessions and Transactions operational views with
   pagination, server-side filters, detail pages, XML inspection and
   session/transaction navigation.

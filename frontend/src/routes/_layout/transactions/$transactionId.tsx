@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router"
+import { XmlViewer } from "@/components/protocol/xml-viewer"
 import { Badge } from "@/components/ui/badge"
 import { useEppTransaction } from "@/hooks/useEpp"
 
@@ -55,8 +56,8 @@ function TransactionDetail() {
           {item.duration_ms === null ? "—" : `${item.duration_ms} ms`}
         </Field>
       </div>
-      <XmlBlock title="Request XML" value={item.request_xml} />
-      <XmlBlock title="Response XML" value={item.response_xml} />
+      <XmlViewer title="Request XML" xml={item.request_xml} />
+      <XmlViewer title="Response XML" xml={item.response_xml} />
       {item.delivery_error ? (
         <Field label="Delivery error">{item.delivery_error}</Field>
       ) : null}
@@ -74,16 +75,6 @@ function Field({
     <div>
       <dt className="text-sm text-muted-foreground">{label}</dt>
       <dd className="mt-1">{children}</dd>
-    </div>
-  )
-}
-function XmlBlock({ title, value }: { title: string; value: string | null }) {
-  return (
-    <div>
-      <h2 className="mb-2 font-semibold">{title}</h2>
-      <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-lg border bg-muted/30 p-4 text-xs">
-        {value ?? "No XML recorded."}
-      </pre>
     </div>
   )
 }
