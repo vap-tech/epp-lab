@@ -503,6 +503,29 @@ mod tests {
     }
 
     #[test]
+    fn parses_contact_update_auth_info_patch() {
+        let parsed = parse_command(
+            br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><update xmlns:contact="urn:ietf:params:xml:ns:contact-1.0"><contact:update><contact:id>C123</contact:id><contact:chg><contact:authInfo><contact:pw>new-secret</contact:pw></contact:authInfo></contact:chg></contact:update></update></command></epp>"#,
+        )
+        .unwrap();
+        assert_eq!(
+            parsed.command,
+            EppCommand::Contact(ContactCommand::Update(ContactUpdateCommand {
+                id: "C123".into(),
+                add_statuses: vec![],
+                rem_statuses: vec![],
+                chg_email: crate::domain::contact::Patch::Unchanged,
+                chg_auth_info: crate::domain::contact::Patch::Set("new-secret".into()),
+            }))
+        );
+        let redacted = redact_password(
+            br#"<epp><command><update><contact:pw>new-secret</contact:pw></update></command></epp>"#,
+        )
+        .unwrap();
+        assert!(!redacted.contains("new-secret"));
+    }
+
+    #[test]
     fn parses_contact_create_required_and_optional_fields() {
         let parsed = parse_command(
             br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><create><contact:create xmlns:contact="urn:ietf:params:xml:ns:contact-1.0"><contact:id>C123</contact:id><contact:postalInfo type="int"><contact:name>Name</contact:name><contact:org>Org</contact:org><contact:addr><contact:street>Main 1</contact:street><contact:city>Moscow</contact:city><contact:cc>RU</contact:cc></contact:addr></contact:postalInfo><contact:voice x="123">+70000000000</contact:voice><contact:email>a@example.test</contact:email><contact:authInfo><contact:pw>secret</contact:pw></contact:authInfo></contact:create></create></command></epp>"#,
