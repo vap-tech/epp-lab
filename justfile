@@ -1,6 +1,14 @@
 check:
     cd backend && cargo fmt --check && cargo clippy --all-targets --all-features -- -D warnings && cargo test
 
+frontend-build:
+    cd frontend && npm ci && npm run lint && npm run build
+
+backend-build:
+    cd backend && cargo build --release
+
+build: frontend-build backend-build
+
 run:
     cd backend && cargo run
 
