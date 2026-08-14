@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Added SQLx persistence operations for listing and toggling zone extension
+  assignments with deterministic ordering and upsert semantics.
 - Added deterministic advertised-extension calculation from registered
   extensions, enabled assignments and active zones.
 - Added an immutable compile-time ExtensionRegistry with validated keys,

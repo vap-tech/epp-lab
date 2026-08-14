@@ -64,6 +64,52 @@ pub(crate) async fn create(
     transaction.commit().await
 }
 
+#[allow(dead_code)]
+pub(crate) async fn list_extensions(
+    pool: &PgPool,
+    zone_id: Uuid,
+) -> Result<Vec<ZoneExtensionRow>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT zone_id, extension_key, enabled FROM zone_extensions WHERE zone_id = $1 ORDER BY extension_key",
+    )
+    .bind(zone_id)
+    .fetch_all(pool)
+    .await
+}
+
+#[allow(dead_code)]
+pub(crate) async fn set_extension(
+    pool: &PgPool,
+    zone_id: Uuid,
+    extension_key: &str,
+    enabled: bool,
+    now: DateTime<Utc>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO zone_extensions (zone_id, extension_key, enabled, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $4)
+        ON CONFLICT (zone_id, extension_key)
+        DO UPDATE SET enabled = EXCLUDED.enabled, updated_at = EXCLUDED.updated_at
+        "#,
+    )
+    .bind(zone_id)
+    .bind(extension_key)
+    .bind(enabled)
+    .bind(now)
+    .execute(pool)
+    .await
+    .map(|_| ())
+}
+
+#[allow(dead_code)]
+#[derive(Debug, sqlx::FromRow)]
+pub(crate) struct ZoneExtensionRow {
+    pub zone_id: Uuid,
+    pub extension_key: String,
+    pub enabled: bool,
+}
+
 async fn insert_zone(
     transaction: &mut Transaction<'_, Postgres>,
     zone: &Zone,
