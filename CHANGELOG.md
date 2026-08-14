@@ -40,6 +40,8 @@
   rejected without storing the request secret.
 - Extended the external Python EPP client with an explicit `--create-contact`
   mode and verified a live Contact create against the VPS.
+- Added read-only authenticated Contacts API list/detail endpoints that expose
+  summaries only and never return authInfo or ciphertext.
 - Added the initial RFC 5733 Contact domain foundation with validated
   identities, postal data, phone/email values, statuses and disclosure types.
 - Added PostgreSQL-backed Admin API integration tests and a dedicated test

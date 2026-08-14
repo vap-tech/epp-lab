@@ -16,6 +16,7 @@ use crate::app::AppState;
 use super::{
     auth::{login, logout, session},
     certificates::{create as create_certificate, list as list_certificates},
+    contacts::{get as get_contact, list as list_contacts},
     epp::{session as epp_session, sessions, transaction, transactions},
     extensions::{catalog, list_zone_extensions, set_zone_extension},
     health::health,
@@ -39,6 +40,8 @@ pub(crate) fn router(state: Arc<AppState>) -> Router {
         .route("/api/auth/session", get(session))
         .route("/api/auth/logout", post(logout))
         .route("/api/info", get(info))
+        .route("/api/contacts", get(list_contacts))
+        .route("/api/contacts/{id}", get(get_contact))
         .route("/api/epp/sessions", get(sessions))
         .route("/api/epp/sessions/{id}", get(epp_session))
         .route("/api/epp/transactions", get(transactions))

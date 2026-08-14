@@ -19,6 +19,52 @@ pub(crate) struct ContactIdentityRow {
 }
 
 #[allow(dead_code)]
+#[derive(Debug, sqlx::FromRow)]
+pub(crate) struct ContactSummaryRow {
+    pub id: Uuid,
+    pub roid: String,
+    pub sponsoring_registrar_id: Uuid,
+    pub email: String,
+    pub statuses: Vec<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+pub(crate) async fn list_summaries(pool: &PgPool) -> Result<Vec<ContactSummaryRow>, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT c.id, c.roid, c.sponsoring_registrar_id, p.email,
+                  COALESCE(array_agg(DISTINCT s.status) FILTER (WHERE s.status IS NOT NULL), '{}') AS statuses,
+                  c.created_at, c.updated_at
+           FROM contacts c
+           JOIN contact_phones p ON p.contact_id = c.id
+           LEFT JOIN contact_statuses s ON s.contact_id = c.id
+           GROUP BY c.id, c.roid, c.sponsoring_registrar_id, p.email, c.created_at, c.updated_at
+           ORDER BY c.created_at DESC"#,
+    )
+    .fetch_all(pool)
+    .await
+}
+
+pub(crate) async fn find_summary(
+    pool: &PgPool,
+    id: Uuid,
+) -> Result<Option<ContactSummaryRow>, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT c.id, c.roid, c.sponsoring_registrar_id, p.email,
+                  COALESCE(array_agg(DISTINCT s.status) FILTER (WHERE s.status IS NOT NULL), '{}') AS statuses,
+                  c.created_at, c.updated_at
+           FROM contacts c
+           JOIN contact_phones p ON p.contact_id = c.id
+           LEFT JOIN contact_statuses s ON s.contact_id = c.id
+           WHERE c.id = $1
+           GROUP BY c.id, c.roid, c.sponsoring_registrar_id, p.email, c.created_at, c.updated_at"#,
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+}
+
+#[allow(dead_code)]
 pub(crate) async fn exists(pool: &PgPool, id: Uuid) -> Result<bool, sqlx::Error> {
     sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM contacts WHERE id = $1)")
         .bind(id)

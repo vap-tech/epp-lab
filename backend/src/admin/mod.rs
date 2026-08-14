@@ -1,5 +1,6 @@
 pub(crate) mod auth;
 pub(crate) mod certificates;
+pub(crate) mod contacts;
 pub(crate) mod epp;
 pub(crate) mod extensions;
 pub(crate) mod health;
