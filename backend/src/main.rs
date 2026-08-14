@@ -20,7 +20,17 @@ async fn main() -> anyhow::Result<()> {
         std::path::Path::new(&settings.epp_tls_key),
         std::path::Path::new(&settings.epp_client_ca),
     )?;
-    let listener = tokio::net::TcpListener::bind(settings.admin_bind).await?;
+    let admin_tls = axum_server::tls_rustls::RustlsConfig::from_pem_file(
+        &settings.admin_tls_cert,
+        &settings.admin_tls_key,
+    )
+    .await?;
+    let admin_handle = axum_server::Handle::new();
+    let mut admin_server = Box::pin(
+        axum_server::tls_rustls::bind_rustls(settings.admin_bind, admin_tls)
+            .handle(admin_handle.clone())
+            .serve(admin::router(state.clone()).into_make_service()),
+    );
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
     let mut epp_task = tokio::spawn(epp::run(
         epp::TcpSettings {
@@ -42,16 +52,19 @@ async fn main() -> anyhow::Result<()> {
         state.db.clone(),
         shutdown_rx,
     ));
-    tracing::info!(address = %settings.admin_bind, "admin API listening");
+    tracing::info!(address = %settings.admin_bind, "admin HTTPS API listening");
     tokio::select! {
-        result = axum::serve(listener, admin::router(state)).with_graceful_shutdown(shutdown_signal()) => {
+        result = &mut admin_server => {
             result?;
         }
         result = &mut epp_task => {
             result??;
         }
+        _ = shutdown_signal() => {}
     }
     let _ = shutdown_tx.send(true);
+    admin_handle.graceful_shutdown(Some(settings.epp_shutdown_grace_period));
+    let _ = admin_server.await;
     match tokio::time::timeout(settings.epp_shutdown_grace_period, epp_task).await {
         Ok(result) => result??,
         Err(_) => tracing::warn!("EPP shutdown grace period elapsed"),

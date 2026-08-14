@@ -6,6 +6,8 @@ use anyhow::{Context, Result};
 pub struct Settings {
     pub app_env: String,
     pub admin_bind: SocketAddr,
+    pub admin_tls_cert: String,
+    pub admin_tls_key: String,
     pub frontend_dist: String,
     pub epp_bind: SocketAddr,
     pub database_url: String,
@@ -32,6 +34,8 @@ impl Settings {
             admin_bind: value("ADMIN_BIND", "0.0.0.0:8080")
                 .parse()
                 .context("ADMIN_BIND must be a valid socket address")?,
+            admin_tls_cert: env::var("ADMIN_TLS_CERT").context("ADMIN_TLS_CERT must be set")?,
+            admin_tls_key: env::var("ADMIN_TLS_KEY").context("ADMIN_TLS_KEY must be set")?,
             frontend_dist: value("FRONTEND_DIST", "frontend/dist"),
             epp_bind: value("EPP_BIND", "0.0.0.0:700")
                 .parse()
