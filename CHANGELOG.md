@@ -38,6 +38,8 @@
 - Connected authenticated `contact:create` to application mapping, encrypted
   persistence and the EPP create response; missing encryption configuration is
   rejected without storing the request secret.
+- Extended the external Python EPP client with an explicit `--create-contact`
+  mode and verified a live Contact create against the VPS.
 - Added the initial RFC 5733 Contact domain foundation with validated
   identities, postal data, phone/email values, statuses and disclosure types.
 - Added PostgreSQL-backed Admin API integration tests and a dedicated test
