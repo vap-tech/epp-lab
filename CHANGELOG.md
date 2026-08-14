@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Added the Zones create dialog with real API mutation, CSRF handling,
+  validation/duplicate feedback and list refresh.
 - Added the authenticated Zones frontend list and sidebar navigation backed by
   the real Zone API.
 - Added authenticated extension catalog and zone assignment endpoints; the

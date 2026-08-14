@@ -25,3 +25,7 @@ export type Zone = z.infer<typeof zoneSchema>
 export async function getZones() {
   return z.array(zoneSchema).parse(await api.get<Zone[]>("/zones"))
 }
+
+export async function createZone(name: string) {
+  return zoneSchema.parse(await api.post<Zone>("/zones", { name }))
+}
