@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router"
+import { createFileRoute, Link, Outlet } from "@tanstack/react-router"
 import { useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
@@ -123,6 +123,7 @@ function Transactions() {
           </div>
         </div>
       )}
+      <Outlet />
     </section>
   )
 }
