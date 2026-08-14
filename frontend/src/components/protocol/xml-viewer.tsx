@@ -11,7 +11,7 @@ let highlighterPromise: ReturnType<typeof createHighlighter> | undefined
 function getXmlHighlighter() {
   if (!highlighterPromise) {
     highlighterPromise = createHighlighter({
-      themes: ["github-light", "one-dark-pro"],
+      themes: ["github-light", "github-dark"],
       langs: ["xml"],
     })
   }
@@ -52,7 +52,7 @@ export function XmlViewer({ xml, title }: XmlViewerProps) {
           setHighlighted(
             highlighter.codeToHtml(displayXml, {
               lang: "xml",
-              theme: resolvedTheme === "dark" ? "one-dark-pro" : "github-light",
+              theme: resolvedTheme === "dark" ? "github-dark" : "github-light",
             }),
           )
       })
