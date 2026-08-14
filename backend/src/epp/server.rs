@@ -291,6 +291,23 @@ async fn handle_connection(
                             .await?,
                         );
                     }
+                    crate::epp::parser::EppCommand::Contact(
+                        crate::epp::parser::ContactCommand::Delete(command),
+                    ) => {
+                        response = Some(
+                            crate::epp::dispatch::execute_contact_delete(
+                                &mut stream,
+                                &limits,
+                                &db,
+                                transaction_id,
+                                &command,
+                                identity.registrar_id,
+                                cl_trid.as_deref(),
+                                &sv_trid,
+                            )
+                            .await?,
+                        );
+                    }
                     crate::epp::parser::EppCommand::Contact(_) => {
                         response = Some(
                             crate::epp::dispatch::execute_parse_error(

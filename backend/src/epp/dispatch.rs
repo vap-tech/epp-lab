@@ -258,6 +258,69 @@ pub(crate) async fn execute_contact_info(
 }
 
 #[allow(clippy::too_many_arguments)]
+pub(crate) async fn execute_contact_delete(
+    stream: &mut TlsStream<TcpStream>,
+    limits: &super::framing::FrameLimits,
+    db: &PgPool,
+    transaction_id: uuid::Uuid,
+    command: &super::parser::ContactDeleteCommand,
+    registrar_id: uuid::Uuid,
+    cl_trid: Option<&str>,
+    sv_trid: &str,
+) -> Result<super::protocol::Response, super::framing::FrameError> {
+    let Some(identity) = crate::storage::contact::find_identity_by_roid(db, &command.id)
+        .await
+        .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?
+    else {
+        return super::protocol::send_response(
+            stream,
+            limits,
+            2303,
+            "object does not exist",
+            cl_trid,
+            sv_trid,
+        )
+        .await;
+    };
+    if identity.sponsoring_registrar_id != registrar_id {
+        return super::protocol::send_response(
+            stream,
+            limits,
+            2201,
+            "authorization error",
+            cl_trid,
+            sv_trid,
+        )
+        .await;
+    }
+    match crate::storage::contact::delete(db, identity.id).await {
+        Ok(true) => super::protocol::send_contact_delete(stream, limits, cl_trid, sv_trid).await,
+        Ok(false) => {
+            super::protocol::send_response(
+                stream,
+                limits,
+                2303,
+                "object does not exist",
+                cl_trid,
+                sv_trid,
+            )
+            .await
+        }
+        Err(error) => {
+            let _ = crate::storage::session::mark_delivery_failed(
+                db,
+                transaction_id,
+                &error.to_string(),
+            )
+            .await;
+            Err(super::framing::FrameError::Write(std::io::Error::other(
+                error,
+            )))
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn execute_logout(
     stream: &mut TlsStream<TcpStream>,
     limits: &super::framing::FrameLimits,

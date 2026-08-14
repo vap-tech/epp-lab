@@ -201,6 +201,26 @@ where
     })
 }
 
+pub(crate) async fn send_contact_delete<S>(
+    stream: &mut S,
+    limits: &FrameLimits,
+    cl_trid: Option<&str>,
+    sv_trid: &str,
+) -> Result<Response, FrameError>
+where
+    S: AsyncWrite + Unpin,
+{
+    send_response(
+        stream,
+        limits,
+        SUCCESS,
+        "Command completed successfully",
+        cl_trid,
+        sv_trid,
+    )
+    .await
+}
+
 #[allow(dead_code)]
 async fn _read_marker<S: AsyncRead + Unpin>(_stream: &mut S) {}
 
