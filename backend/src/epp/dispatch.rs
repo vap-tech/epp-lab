@@ -183,6 +183,81 @@ pub(crate) async fn execute_contact_create(
 }
 
 #[allow(clippy::too_many_arguments)]
+pub(crate) async fn execute_contact_info(
+    stream: &mut TlsStream<TcpStream>,
+    limits: &super::framing::FrameLimits,
+    db: &PgPool,
+    transaction_id: uuid::Uuid,
+    cipher: Option<&dyn crate::security::SecretCipher>,
+    command: &super::parser::ContactInfoCommand,
+    registrar_id: uuid::Uuid,
+    cl_trid: Option<&str>,
+    sv_trid: &str,
+) -> Result<super::protocol::Response, super::framing::FrameError> {
+    let Some(cipher) = cipher else {
+        return super::protocol::send_response(
+            stream,
+            limits,
+            super::protocol::COMMAND_ERROR,
+            "authInfo encryption is not configured",
+            cl_trid,
+            sv_trid,
+        )
+        .await;
+    };
+    let id = crate::storage::contact::find_identity_by_roid(db, &command.id)
+        .await
+        .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?;
+    let Some(identity) = id else {
+        return super::protocol::send_response(
+            stream,
+            limits,
+            2303,
+            "object does not exist",
+            cl_trid,
+            sv_trid,
+        )
+        .await;
+    };
+    if identity.sponsoring_registrar_id != registrar_id {
+        return super::protocol::send_response(
+            stream,
+            limits,
+            2201,
+            "authorization error",
+            cl_trid,
+            sv_trid,
+        )
+        .await;
+    }
+    let contact = crate::storage::contact::find_detail(db, identity.id)
+        .await
+        .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?
+        .ok_or_else(|| {
+            super::framing::FrameError::Write(std::io::Error::other("contact disappeared"))
+        })?;
+    let auth = cipher
+        .decrypt(&identity.auth_info_ciphertext)
+        .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?;
+    let auth = String::from_utf8(auth)
+        .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?;
+    match super::protocol::send_contact_info(stream, limits, &contact, &auth, cl_trid, sv_trid)
+        .await
+    {
+        Ok(response) => Ok(response),
+        Err(error) => {
+            let _ = crate::storage::session::mark_delivery_failed(
+                db,
+                transaction_id,
+                &error.to_string(),
+            )
+            .await;
+            Err(error)
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn execute_logout(
     stream: &mut TlsStream<TcpStream>,
     limits: &super::framing::FrameLimits,

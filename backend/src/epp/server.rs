@@ -273,6 +273,24 @@ async fn handle_connection(
                             .await?,
                         );
                     }
+                    crate::epp::parser::EppCommand::Contact(
+                        crate::epp::parser::ContactCommand::Info(command),
+                    ) => {
+                        response = Some(
+                            crate::epp::dispatch::execute_contact_info(
+                                &mut stream,
+                                &limits,
+                                &db,
+                                transaction_id,
+                                contact_authinfo_cipher.as_deref(),
+                                &command,
+                                identity.registrar_id,
+                                cl_trid.as_deref(),
+                                &sv_trid,
+                            )
+                            .await?,
+                        );
+                    }
                     crate::epp::parser::EppCommand::Contact(_) => {
                         response = Some(
                             crate::epp::dispatch::execute_parse_error(

@@ -124,6 +124,18 @@ pub(crate) async fn find_identity(
     .await
 }
 
+pub(crate) async fn find_identity_by_roid(
+    pool: &PgPool,
+    roid: &str,
+) -> Result<Option<ContactIdentityRow>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT id, roid, sponsoring_registrar_id, created_by, created_at, updated_by, updated_at, transferred_at, auth_info_ciphertext, disclose_flag FROM contacts WHERE roid = $1",
+    )
+    .bind(roid)
+    .fetch_optional(pool)
+    .await
+}
+
 #[allow(dead_code)]
 pub(crate) async fn create_identity(
     pool: &PgPool,

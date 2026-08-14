@@ -150,6 +150,57 @@ where
     })
 }
 
+pub(crate) async fn send_contact_info<S>(
+    stream: &mut S,
+    limits: &FrameLimits,
+    contact: &crate::storage::contact::ContactDetailRow,
+    auth_info: &str,
+    cl_trid: Option<&str>,
+    sv_trid: &str,
+) -> Result<Response, FrameError>
+where
+    S: AsyncWrite + Unpin,
+{
+    let streets = contact
+        .streets
+        .iter()
+        .map(|s| format!("<contact:street>{}</contact:street>", escape_xml(s)))
+        .collect::<String>();
+    let wire = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?><epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><response><result code="1000"><msg>Command completed successfully</msg></result><resData><contact:infData xmlns:contact="urn:ietf:params:xml:ns:contact-1.0"><contact:id>{}</contact:id><contact:roid>{}</contact:roid><contact:status s="ok"/><contact:postalInfo type="int"><contact:name>{}</contact:name>{}<contact:addr>{}<contact:city>{}</contact:city><contact:cc>{}</contact:cc></contact:addr></contact:postalInfo><contact:voice>{}</contact:voice><contact:email>{}</contact:email><contact:authInfo><contact:pw>{}</contact:pw></contact:authInfo><contact:crDate>{}</contact:crDate><contact:upDate>{}</contact:upDate></contact:infData></resData>{}<svTRID>{}</svTRID></response></epp>"#,
+        escape_xml(&contact.roid),
+        escape_xml(&contact.roid),
+        escape_xml(&contact.name),
+        contact
+            .organization
+            .as_deref()
+            .map(|o| format!("<contact:org>{}</contact:org>", escape_xml(o)))
+            .unwrap_or_default(),
+        streets,
+        escape_xml(&contact.city),
+        escape_xml(&contact.country_code),
+        escape_xml(&contact.voice),
+        escape_xml(&contact.email),
+        escape_xml(auth_info),
+        contact.created_at.to_rfc3339(),
+        contact.updated_at.to_rfc3339(),
+        cl_trid
+            .map(|v| format!("<clTRID>{}</clTRID>", escape_xml(v)))
+            .unwrap_or_default(),
+        escape_xml(sv_trid)
+    );
+    let persisted = wire.replace(
+        &format!("<contact:pw>{}</contact:pw>", escape_xml(auth_info)),
+        "<contact:pw>REDACTED</contact:pw>",
+    );
+    write_frame(stream, wire.as_bytes(), limits).await?;
+    Ok(Response {
+        xml: wire,
+        persisted_xml: persisted,
+        code: Some(SUCCESS),
+    })
+}
+
 #[allow(dead_code)]
 async fn _read_marker<S: AsyncRead + Unpin>(_stream: &mut S) {}
 
