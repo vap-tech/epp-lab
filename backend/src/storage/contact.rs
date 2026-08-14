@@ -60,3 +60,45 @@ pub(crate) async fn create_identity(
     .await
     .map(|_| ())
 }
+
+#[cfg(test)]
+mod tests {
+    use chrono::Utc;
+
+    use super::*;
+
+    #[ignore = "requires PostgreSQL; run through just test-with-db"]
+    #[sqlx::test(migrations = "../backend/migrations")]
+    async fn stores_and_reads_contact_identity_ciphertext(pool: PgPool) {
+        let registrar_id = Uuid::new_v4();
+        let now = Utc::now();
+        sqlx::query(
+            "INSERT INTO registrars (id, handle, name, client_id, password_hash, status, created_at, updated_at) VALUES ($1, 'REG-1', 'Registrar', 'client-1', 'not-used', 'active', $2, $2)",
+        )
+        .bind(registrar_id)
+        .bind(now)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let row = ContactIdentityRow {
+            id: Uuid::new_v4(),
+            roid: "SH8013-EXAMPLE".to_owned(),
+            sponsoring_registrar_id: registrar_id,
+            created_by: registrar_id,
+            created_at: now,
+            updated_by: registrar_id,
+            updated_at: now,
+            transferred_at: None,
+            auth_info_ciphertext: "ciphertext-not-plaintext".to_owned(),
+            disclose_flag: "private".to_owned(),
+        };
+
+        create_identity(&pool, &row).await.unwrap();
+        let stored = find_identity(&pool, row.id).await.unwrap().unwrap();
+        assert_eq!(stored.roid, row.roid);
+        assert_eq!(stored.auth_info_ciphertext, row.auth_info_ciphertext);
+        assert_ne!(stored.auth_info_ciphertext, "plain-auth-info");
+        assert!(exists(&pool, row.id).await.unwrap());
+    }
+}

@@ -12,6 +12,8 @@
   phone, status and disclosure tables; `authInfo` is stored only as ciphertext.
 - Added the initial Contact repository identity boundary for future application
   commands.
+- Added PostgreSQL coverage proving Contact identity round-trips through the
+  repository with ciphertext storage and registrar foreign-key enforcement.
 - Added the initial RFC 5733 Contact domain foundation with validated
   identities, postal data, phone/email values, statuses and disclosure types.
 - Added PostgreSQL-backed Admin API integration tests and a dedicated test
