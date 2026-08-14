@@ -123,6 +123,16 @@ pub(crate) async fn list_extensions(
     .await
 }
 
+pub(crate) async fn list_all_extensions(
+    pool: &PgPool,
+) -> Result<Vec<ZoneExtensionRow>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT zone_id, extension_key, enabled FROM zone_extensions ORDER BY zone_id, extension_key",
+    )
+    .fetch_all(pool)
+    .await
+}
+
 #[allow(dead_code)]
 pub(crate) async fn set_extension(
     pool: &PgPool,

@@ -30,23 +30,23 @@ pub(crate) async fn advertised_extension_uris(
 ) -> Result<Vec<String>, CapabilityError> {
     let rows = zone::list(db).await.map_err(CapabilityError::Zones)?;
     let mut zones = Vec::with_capacity(rows.len());
-    let mut assignments = Vec::new();
+    let extension_rows = zone::list_all_extensions(db)
+        .await
+        .map_err(CapabilityError::Extensions)?;
+    let mut assignments = Vec::with_capacity(extension_rows.len());
 
     for row in rows {
-        let zone_id = row.id;
         zones.push(zone::to_domain(row).map_err(CapabilityError::InvalidZone)?);
-        for extension in zone::list_extensions(db, zone_id)
-            .await
-            .map_err(CapabilityError::Extensions)?
-        {
-            let extension_key = ExtensionKey::parse(&extension.extension_key)
-                .map_err(|error| CapabilityError::InvalidExtensionKey(error.to_string()))?;
-            assignments.push(ZoneExtensionAssignment {
-                zone_id: crate::domain::zone::ZoneId::new(extension.zone_id),
-                extension_key,
-                enabled: extension.enabled,
-            });
-        }
+    }
+
+    for extension in extension_rows {
+        let extension_key = ExtensionKey::parse(&extension.extension_key)
+            .map_err(|error| CapabilityError::InvalidExtensionKey(error.to_string()))?;
+        assignments.push(ZoneExtensionAssignment {
+            zone_id: crate::domain::zone::ZoneId::new(extension.zone_id),
+            extension_key,
+            enabled: extension.enabled,
+        });
     }
 
     Ok(registry
