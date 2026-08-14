@@ -56,7 +56,7 @@ function SessionDetail() {
       <Link
         className="text-primary hover:underline"
         to="/transactions"
-        search={{ session_id: item.id }}
+        search={{ page: 1 }}
       >
         View session transactions
       </Link>

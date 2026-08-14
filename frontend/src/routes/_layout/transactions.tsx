@@ -4,7 +4,7 @@ import {
   Outlet,
   useRouterState,
 } from "@tanstack/react-router"
-import { useState } from "react"
+import { z } from "zod"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -12,11 +12,13 @@ import { useEppTransactions } from "@/hooks/useEpp"
 
 export const Route = createFileRoute("/_layout/transactions")({
   component: Transactions,
+  validateSearch: z.object({ page: z.coerce.number().int().min(1).catch(1) }),
   head: () => ({ meta: [{ title: "EPP Transactions - EPP Lab" }] }),
 })
 
 function Transactions() {
-  const [page, setPage] = useState(1)
+  const { page } = Route.useSearch()
+  const navigate = Route.useNavigate()
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   })
@@ -79,6 +81,7 @@ function Transactions() {
                     <Link
                       className="text-primary hover:underline"
                       to="/transactions/$transactionId"
+                      search={{ page: 1 }}
                       params={{ transactionId: item.id }}
                     >
                       {item.command}
@@ -113,7 +116,7 @@ function Transactions() {
                 variant="outline"
                 size="sm"
                 disabled={page <= 1}
-                onClick={() => setPage((value) => value - 1)}
+                onClick={() => navigate({ search: { page: page - 1 } })}
               >
                 Previous
               </Button>
@@ -124,7 +127,7 @@ function Transactions() {
                 variant="outline"
                 size="sm"
                 disabled={page >= (query.data?.total_pages ?? 0)}
-                onClick={() => setPage((value) => value + 1)}
+                onClick={() => navigate({ search: { page: page + 1 } })}
               >
                 Next
               </Button>

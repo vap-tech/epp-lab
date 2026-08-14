@@ -27,6 +27,7 @@ function TransactionDetail() {
           <Link
             className="text-primary hover:underline"
             to="/sessions/$sessionId"
+            search={{ page: 1 }}
             params={{ sessionId: item.session_id }}
           >
             {item.session_id}

@@ -4,7 +4,7 @@ import {
   Outlet,
   useRouterState,
 } from "@tanstack/react-router"
-import { useState } from "react"
+import { z } from "zod"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -12,11 +12,13 @@ import { useEppSessions } from "@/hooks/useEpp"
 
 export const Route = createFileRoute("/_layout/sessions")({
   component: Sessions,
+  validateSearch: z.object({ page: z.coerce.number().int().min(1).catch(1) }),
   head: () => ({ meta: [{ title: "EPP Sessions - EPP Lab" }] }),
 })
 
 function Sessions() {
-  const [page, setPage] = useState(1)
+  const { page } = Route.useSearch()
+  const navigate = Route.useNavigate()
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   })
@@ -94,6 +96,7 @@ function Sessions() {
                     <Link
                       className="text-primary hover:underline"
                       to="/sessions/$sessionId"
+                      search={{ page: 1 }}
                       params={{ sessionId: item.id }}
                     >
                       {item.transaction_count}
@@ -111,7 +114,7 @@ function Sessions() {
                 variant="outline"
                 size="sm"
                 disabled={page <= 1}
-                onClick={() => setPage((value) => value - 1)}
+                onClick={() => navigate({ search: { page: page - 1 } })}
               >
                 Previous
               </Button>
@@ -122,7 +125,7 @@ function Sessions() {
                 variant="outline"
                 size="sm"
                 disabled={page >= (query.data?.total_pages ?? 0)}
-                onClick={() => setPage((value) => value + 1)}
+                onClick={() => navigate({ search: { page: page + 1 } })}
               >
                 Next
               </Button>
