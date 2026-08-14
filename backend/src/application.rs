@@ -21,6 +21,21 @@ pub(crate) enum ZoneCommandError {
     Database(#[source] sqlx::Error),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ContactCheckResult {
+    pub available: bool,
+}
+
+#[allow(dead_code)]
+pub(crate) async fn check_contact(
+    db: &PgPool,
+    roid: &str,
+) -> Result<ContactCheckResult, sqlx::Error> {
+    Ok(ContactCheckResult {
+        available: !crate::storage::contact::exists_by_roid(db, roid).await?,
+    })
+}
+
 pub(crate) async fn create_zone(
     db: &PgPool,
     name: &str,

@@ -26,6 +26,14 @@ pub(crate) async fn exists(pool: &PgPool, id: Uuid) -> Result<bool, sqlx::Error>
 }
 
 #[allow(dead_code)]
+pub(crate) async fn exists_by_roid(pool: &PgPool, roid: &str) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM contacts WHERE roid = $1)")
+        .bind(roid)
+        .fetch_one(pool)
+        .await
+}
+
+#[allow(dead_code)]
 pub(crate) async fn find_identity(
     pool: &PgPool,
     id: Uuid,
@@ -100,5 +108,7 @@ mod tests {
         assert_eq!(stored.auth_info_ciphertext, row.auth_info_ciphertext);
         assert_ne!(stored.auth_info_ciphertext, "plain-auth-info");
         assert!(exists(&pool, row.id).await.unwrap());
+        assert!(exists_by_roid(&pool, &row.roid).await.unwrap());
+        assert!(!exists_by_roid(&pool, "SH404-NOT-FOUND").await.unwrap());
     }
 }

@@ -23,6 +23,8 @@
   are implemented.
 - Added Contact check command parsing with namespace-aware IDs and malformed
   empty-check rejection.
+- Added the application/storage availability boundary for Contact check,
+  including PostgreSQL coverage for existing and unknown ROIDs.
 - Added the initial RFC 5733 Contact domain foundation with validated
   identities, postal data, phone/email values, statuses and disclosure types.
 - Added PostgreSQL-backed Admin API integration tests and a dedicated test
