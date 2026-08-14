@@ -198,6 +198,34 @@ pub(crate) async fn update_client_statuses(
     tx.commit().await
 }
 
+pub(crate) async fn update_postal_info(
+    pool: &PgPool,
+    id: Uuid,
+    city: Option<&str>,
+    state_province: Option<&str>,
+    postal_code: Option<&str>,
+    country_code: Option<&str>,
+    streets: &[&str],
+) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    sqlx::query("UPDATE contact_postal_info SET city = COALESCE($2, city), state_province = COALESCE($3, state_province), postal_code = COALESCE($4, postal_code), country_code = COALESCE($5, country_code) WHERE contact_id = $1 AND info_type = 'international'")
+        .bind(id).bind(city).bind(state_province).bind(postal_code).bind(country_code)
+        .execute(&mut *tx).await?;
+    if !streets.is_empty() {
+        sqlx::query("DELETE FROM contact_postal_streets WHERE contact_id = $1 AND info_type = 'international'")
+            .bind(id).execute(&mut *tx).await?;
+        for (position, street) in streets.iter().enumerate() {
+            sqlx::query("INSERT INTO contact_postal_streets (contact_id, info_type, position, street) VALUES ($1, 'international', $2, $3)")
+                .bind(id).bind((position + 1) as i16).bind(street).execute(&mut *tx).await?;
+        }
+    }
+    sqlx::query("UPDATE contacts SET updated_at = NOW() WHERE id = $1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await
+}
+
 #[allow(dead_code)]
 pub(crate) async fn create_identity(
     pool: &PgPool,

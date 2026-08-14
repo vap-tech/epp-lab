@@ -472,6 +472,45 @@ pub(crate) async fn execute_contact_update(
         crate::domain::contact::Patch::Set(value) => Some(value.as_str()),
         _ => None,
     };
+    let city = match &command.chg_city {
+        crate::domain::contact::Patch::Set(value) => Some(value.as_str()),
+        _ => None,
+    };
+    let state_province = match &command.chg_state_province {
+        crate::domain::contact::Patch::Set(value) => Some(value.as_str()),
+        _ => None,
+    };
+    let postal_code = match &command.chg_postal_code {
+        crate::domain::contact::Patch::Set(value) => Some(value.as_str()),
+        _ => None,
+    };
+    let country_code = match &command.chg_country_code {
+        crate::domain::contact::Patch::Set(value) => Some(value.as_str()),
+        _ => None,
+    };
+    if city.is_some()
+        || state_province.is_some()
+        || postal_code.is_some()
+        || country_code.is_some()
+        || !command.chg_streets.is_empty()
+    {
+        let streets = command
+            .chg_streets
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        crate::storage::contact::update_postal_info(
+            db,
+            identity.id,
+            city,
+            state_province,
+            postal_code,
+            country_code,
+            &streets,
+        )
+        .await
+        .map_err(|e| super::framing::FrameError::Write(std::io::Error::other(e)))?;
+    }
     crate::storage::contact::update_email_auth(
         db,
         identity.id,
