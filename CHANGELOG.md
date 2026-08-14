@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Replaced Shiki with a minimal Prism XML tokenizer and custom EPP Lab token
+  theme to keep production assets small and CSP-compatible.
 - Added a reusable EPP XML viewer with pretty/raw modes, wrapping, original
   XML copy, theme-aware Shiki highlighting, and safe formatting fallbacks.
 - Added read-only EPP Sessions and Transactions operational views with

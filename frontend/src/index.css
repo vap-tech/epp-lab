@@ -122,3 +122,28 @@
     cursor: pointer;
   }
 }
+
+.xml-viewer .token.tag,
+.xml-viewer .token.tag .token.tag {
+  color: var(--primary);
+}
+
+.xml-viewer .token.attr-name {
+  color: oklch(0.72 0.12 250);
+}
+
+.xml-viewer .token.attr-value,
+.xml-viewer .token.string {
+  color: oklch(0.72 0.13 145);
+}
+
+.xml-viewer .token.punctuation {
+  color: var(--muted-foreground);
+}
+
+.xml-viewer .token.comment,
+.xml-viewer .token.doctype,
+.xml-viewer .token.cdata {
+  color: var(--muted-foreground);
+  font-style: italic;
+}

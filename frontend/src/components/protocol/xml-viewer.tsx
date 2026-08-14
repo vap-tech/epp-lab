@@ -1,24 +1,12 @@
-import { createJavaScriptRegexEngine } from "@shikijs/engine-javascript"
-import { useEffect, useMemo, useState } from "react"
-import { createHighlighter } from "shiki"
+import Prism from "prismjs"
+import "prismjs/components/prism-markup"
+import { useMemo, useState } from "react"
 import { toast } from "sonner"
 import xmlFormat from "xml-formatter"
 
-import { useTheme } from "@/components/theme-provider"
 import { Button } from "@/components/ui/button"
 
 type XmlViewerProps = { xml: string | null; title?: string }
-let highlighterPromise: ReturnType<typeof createHighlighter> | undefined
-function getXmlHighlighter() {
-  if (!highlighterPromise) {
-    highlighterPromise = createHighlighter({
-      engine: createJavaScriptRegexEngine(),
-      themes: ["github-light", "github-dark"],
-      langs: ["xml"],
-    })
-  }
-  return highlighterPromise
-}
 function safeFormatXml(xml: string) {
   try {
     return xmlFormat(xml, { indentation: "  ", lineSeparator: "\n" })
@@ -28,10 +16,8 @@ function safeFormatXml(xml: string) {
 }
 
 export function XmlViewer({ xml, title }: XmlViewerProps) {
-  const { resolvedTheme } = useTheme()
   const [raw, setRaw] = useState(false)
   const [wrap, setWrap] = useState(false)
-  const [highlighted, setHighlighted] = useState<string | null>(null)
   const originalXml = xml
   const displayXml = useMemo(
     () =>
@@ -42,27 +28,13 @@ export function XmlViewer({ xml, title }: XmlViewerProps) {
           : safeFormatXml(originalXml),
     [originalXml, raw],
   )
-  useEffect(() => {
-    let cancelled = false
-    if (displayXml === null) {
-      setHighlighted(null)
-      return
-    }
-    getXmlHighlighter()
-      .then((highlighter) => {
-        if (!cancelled)
-          setHighlighted(
-            highlighter.codeToHtml(displayXml, {
-              lang: "xml",
-              theme: resolvedTheme === "dark" ? "github-dark" : "github-light",
-            }),
-          )
-      })
-      .catch(() => setHighlighted(null))
-    return () => {
-      cancelled = true
-    }
-  }, [displayXml, resolvedTheme])
+  const highlighted = useMemo(
+    () =>
+      displayXml === null
+        ? null
+        : Prism.highlight(displayXml, Prism.languages.markup, "xml"),
+    [displayXml],
+  )
   return (
     <section className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
@@ -110,8 +82,8 @@ export function XmlViewer({ xml, title }: XmlViewerProps) {
         </p>
       ) : highlighted ? (
         <div
-          className={`max-h-[550px] overflow-auto rounded-lg border bg-muted/30 p-4 text-xs [&_pre]:m-0 [&_pre]:bg-transparent [&_code]:font-mono ${wrap ? "whitespace-pre-wrap" : "whitespace-pre"}`}
-          // biome-ignore lint/security/noDangerouslySetInnerHtml: Shiki generates this HTML locally from the persisted XML string.
+          className={`xml-viewer max-h-[550px] overflow-auto rounded-lg border bg-muted/30 p-4 text-xs font-mono ${wrap ? "whitespace-pre-wrap" : "whitespace-pre"}`}
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: Prism escapes XML before producing local token markup.
           dangerouslySetInnerHTML={{ __html: highlighted }}
         />
       ) : (
