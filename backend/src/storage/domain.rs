@@ -110,6 +110,37 @@ pub(crate) async fn create(pool: &PgPool, new_domain: NewDomain<'_>) -> Result<(
     tx.commit().await
 }
 
+pub(crate) async fn update(pool: &PgPool, new_domain: NewDomain<'_>) -> Result<bool, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    let result = sqlx::query("UPDATE domains SET auth_info_ciphertext = $2, updated_by = $3, updated_at = $4 WHERE id = $1")
+        .bind(new_domain.row.id)
+        .bind(&new_domain.row.auth_info_ciphertext)
+        .bind(new_domain.row.updated_by)
+        .bind(new_domain.row.updated_at)
+        .execute(&mut *tx).await?;
+    if result.rows_affected() != 1 {
+        tx.rollback().await?;
+        return Ok(false);
+    }
+    sqlx::query("DELETE FROM domain_contacts WHERE domain_id = $1")
+        .bind(new_domain.row.id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM domain_nameservers WHERE domain_id = $1")
+        .bind(new_domain.row.id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM domain_statuses WHERE domain_id = $1")
+        .bind(new_domain.row.id)
+        .execute(&mut *tx)
+        .await?;
+    insert_contacts(&mut tx, new_domain.contacts).await?;
+    insert_nameservers(&mut tx, new_domain.nameservers).await?;
+    insert_statuses(&mut tx, new_domain.statuses).await?;
+    tx.commit().await?;
+    Ok(true)
+}
+
 pub(crate) async fn delete(pool: &PgPool, id: Uuid) -> Result<bool, sqlx::Error> {
     let result = sqlx::query("DELETE FROM domains WHERE id = $1")
         .bind(id)

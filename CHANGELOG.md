@@ -4,6 +4,9 @@
 
 ### Changed
 
+- Implemented atomic `domain:update` candidate-state processing for contacts,
+  nameservers, client statuses and authInfo, including Zone policy and
+  same-Zone nameserver validation plus `clientUpdateProhibited` enforcement.
 - Implemented `domain:info` with sponsor/authInfo authorization, nameserver,
   contact and status serialization, and redacted persisted responses when the
   Domain authInfo is returned on the wire.

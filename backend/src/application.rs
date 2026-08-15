@@ -531,6 +531,253 @@ pub(crate) async fn load_domain_info(
     }))
 }
 
+#[derive(Debug, Error)]
+pub(crate) enum DomainUpdateError {
+    #[error("domain does not exist")]
+    NotFound,
+    #[error("invalid domain update: {0}")]
+    InvalidData(String),
+    #[error("authorization information is invalid")]
+    AuthInfo,
+    #[error("contact role is not allowed by the zone policy")]
+    ContactPolicy,
+    #[error("contact does not exist")]
+    ContactNotFound,
+    #[error("nameserver resolves into the domain zone")]
+    SameZoneNameserver,
+    #[error("clientUpdateProhibited is set")]
+    ClientUpdateProhibited,
+    #[error("database error: {0}")]
+    Database(#[source] sqlx::Error),
+    #[error("authInfo encryption failed: {0}")]
+    Encryption(#[source] crate::security::SecretCipherError),
+}
+
+async fn contact_id_by_roid(
+    db: &PgPool,
+    roid: &str,
+) -> Result<crate::domain::contact::ContactId, DomainUpdateError> {
+    crate::storage::contact::find_id_by_roid(db, roid)
+        .await
+        .map_err(DomainUpdateError::Database)?
+        .map(crate::domain::contact::ContactId::new)
+        .ok_or(DomainUpdateError::ContactNotFound)
+}
+
+pub(crate) async fn update_domain(
+    db: &PgPool,
+    command: &crate::epp::parser::DomainUpdateCommand,
+    registrar_id: uuid::Uuid,
+    cipher: &dyn crate::security::SecretCipher,
+    now: DateTime<Utc>,
+) -> Result<(), DomainUpdateError> {
+    use crate::domain::contact::Patch;
+    use crate::domain::domain::{
+        DomainContacts, DomainName, DomainNameServer, validate_contact_usage_for_create,
+    };
+    let Some(info) =
+        load_domain_info(db, &command.name, cipher)
+            .await
+            .map_err(|error| match error {
+                DomainInfoError::Database(error) => DomainUpdateError::Database(error),
+                DomainInfoError::Decryption(error) => DomainUpdateError::Encryption(error),
+                DomainInfoError::InvalidAuthInfo(error) => {
+                    DomainUpdateError::InvalidData(error.to_string())
+                }
+            })?
+    else {
+        return Err(DomainUpdateError::NotFound);
+    };
+    if info.row.sponsoring_registrar_id != registrar_id {
+        return Err(DomainUpdateError::AuthInfo);
+    }
+    let persisted_statuses = info
+        .statuses
+        .iter()
+        .map(|s| s.status.as_str())
+        .collect::<Vec<_>>();
+    if persisted_statuses.contains(&"clientUpdateProhibited") {
+        return Err(DomainUpdateError::ClientUpdateProhibited);
+    }
+
+    let zones = crate::application_domain::PostgresDomainZoneLookup { db }
+        .configured_zones()
+        .await
+        .map_err(DomainUpdateError::InvalidData)?;
+    let zone = zones
+        .iter()
+        .find(|zone| zone.id.into_uuid() == info.row.zone_id)
+        .ok_or_else(|| DomainUpdateError::InvalidData("domain zone is missing".into()))?;
+    let mut contacts = DomainContacts::default();
+    for row in &info.contacts {
+        let id = crate::domain::contact::ContactId::new(row.contact_id);
+        match row.role.as_str() {
+            "registrant" => contacts.registrant = Some(id),
+            "admin" => contacts.admin.push(id),
+            "tech" => contacts.tech.push(id),
+            "billing" => contacts.billing.push(id),
+            _ => {
+                return Err(DomainUpdateError::InvalidData(
+                    "invalid persisted contact role".into(),
+                ));
+            }
+        }
+    }
+    for contact in &command.add_contacts {
+        let id = contact_id_by_roid(db, &contact.id).await?;
+        let target = match contact.role.as_str() {
+            "admin" => &mut contacts.admin,
+            "tech" => &mut contacts.tech,
+            "billing" => &mut contacts.billing,
+            _ => {
+                return Err(DomainUpdateError::InvalidData(
+                    "registrant must use chg".into(),
+                ));
+            }
+        };
+        if !target.contains(&id) {
+            target.push(id);
+        }
+    }
+    for contact in &command.rem_contacts {
+        let id = contact_id_by_roid(db, &contact.id).await?;
+        let target = match contact.role.as_str() {
+            "admin" => &mut contacts.admin,
+            "tech" => &mut contacts.tech,
+            "billing" => &mut contacts.billing,
+            _ => {
+                return Err(DomainUpdateError::InvalidData(
+                    "invalid contact role".into(),
+                ));
+            }
+        };
+        target.retain(|value| *value != id);
+    }
+    if let Patch::Set(roid) = &command.chg_registrant {
+        contacts.registrant = Some(contact_id_by_roid(db, roid).await?);
+    }
+    if matches!(command.chg_registrant, Patch::Clear) {
+        contacts.registrant = None;
+    }
+    validate_contact_usage_for_create(&contacts, zone.contact_policy)
+        .map_err(|_| DomainUpdateError::ContactPolicy)?;
+
+    let mut nameservers = info
+        .nameservers
+        .iter()
+        .map(|row| {
+            Ok(DomainNameServer::new(
+                DomainName::parse(&row.hostname)
+                    .map_err(|error| DomainUpdateError::InvalidData(error.to_string()))?,
+            ))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    for hostname in &command.add_nameservers {
+        let ns = DomainNameServer::new(
+            DomainName::parse(hostname)
+                .map_err(|error| DomainUpdateError::InvalidData(error.to_string()))?,
+        );
+        if !nameservers.contains(&ns) {
+            nameservers.push(ns);
+        }
+    }
+    for hostname in &command.rem_nameservers {
+        nameservers.retain(|ns| ns.hostname.as_str() != hostname);
+    }
+    if crate::domain::domain::has_same_zone_nameserver(&nameservers, zone.id, &zones) {
+        return Err(DomainUpdateError::SameZoneNameserver);
+    }
+
+    let mut status_names = persisted_statuses
+        .into_iter()
+        .filter(|status| !command.rem_statuses.iter().any(|value| value == status))
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    for status in &command.add_statuses {
+        if !matches!(
+            status.as_str(),
+            "clientDeleteProhibited"
+                | "clientHold"
+                | "clientRenewProhibited"
+                | "clientTransferProhibited"
+                | "clientUpdateProhibited"
+        ) {
+            return Err(DomainUpdateError::InvalidData(
+                "invalid client status".into(),
+            ));
+        }
+        if !status_names.contains(status) {
+            status_names.push(status.clone());
+        }
+    }
+    let auth_ciphertext = match &command.chg_auth_info {
+        Patch::Set(value) if !value.is_empty() => cipher
+            .encrypt(value.as_bytes())
+            .map_err(DomainUpdateError::Encryption)?,
+        Patch::Set(_) | Patch::Clear => {
+            return Err(DomainUpdateError::InvalidData(
+                "authInfo cannot be empty".into(),
+            ));
+        }
+        Patch::Unchanged => info.row.auth_info_ciphertext.clone(),
+    };
+    let contact_rows = contacts
+        .registrant
+        .into_iter()
+        .map(|id| ("registrant", id))
+        .chain(contacts.admin.iter().map(|id| ("admin", *id)))
+        .chain(contacts.tech.iter().map(|id| ("tech", *id)))
+        .chain(contacts.billing.iter().map(|id| ("billing", *id)))
+        .enumerate()
+        .map(
+            |(position, (role, id))| crate::storage::domain::DomainContactRow {
+                domain_id: info.row.id,
+                role: role.into(),
+                contact_id: id.into_uuid(),
+                position: (position + 1) as i16,
+            },
+        )
+        .collect::<Vec<_>>();
+    let ns_rows = nameservers
+        .iter()
+        .enumerate()
+        .map(
+            |(position, ns)| crate::storage::domain::DomainNameserverRow {
+                domain_id: info.row.id,
+                position: (position + 1) as i16,
+                hostname: ns.hostname.as_str().into(),
+            },
+        )
+        .collect::<Vec<_>>();
+    let status_rows = status_names
+        .iter()
+        .map(|status| crate::storage::domain::DomainStatusRow {
+            domain_id: info.row.id,
+            status: status.clone(),
+            source: "client".into(),
+        })
+        .collect::<Vec<_>>();
+    let row = crate::storage::domain::DomainRow {
+        auth_info_ciphertext: auth_ciphertext,
+        updated_by: Some(registrar_id),
+        updated_at: Some(now),
+        ..info.row
+    };
+    crate::storage::domain::update(
+        db,
+        crate::storage::domain::NewDomain {
+            row: &row,
+            contacts: &contact_rows,
+            nameservers: &ns_rows,
+            statuses: &status_rows,
+        },
+    )
+    .await
+    .map_err(DomainUpdateError::Database)?
+    .then_some(())
+    .ok_or(DomainUpdateError::NotFound)
+}
+
 pub(crate) async fn create_zone(
     db: &PgPool,
     name: &str,

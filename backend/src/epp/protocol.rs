@@ -515,6 +515,26 @@ where
     })
 }
 
+pub(crate) async fn send_domain_update<S>(
+    stream: &mut S,
+    limits: &FrameLimits,
+    cl_trid: Option<&str>,
+    sv_trid: &str,
+) -> Result<Response, FrameError>
+where
+    S: AsyncWrite + Unpin,
+{
+    send_response(
+        stream,
+        limits,
+        SUCCESS,
+        "Command completed successfully",
+        cl_trid,
+        sv_trid,
+    )
+    .await
+}
+
 pub(crate) async fn send_contact_delete<S>(
     stream: &mut S,
     limits: &FrameLimits,

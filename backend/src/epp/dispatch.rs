@@ -421,6 +421,98 @@ pub(crate) async fn execute_domain_info(
 }
 
 #[allow(clippy::too_many_arguments)]
+pub(crate) async fn execute_domain_update(
+    stream: &mut TlsStream<TcpStream>,
+    limits: &super::framing::FrameLimits,
+    db: &PgPool,
+    transaction_id: uuid::Uuid,
+    state: &crate::registry::session::SessionState,
+    cipher: Option<&dyn crate::security::SecretCipher>,
+    command: &super::parser::DomainUpdateCommand,
+    registrar_id: uuid::Uuid,
+    cl_trid: Option<&str>,
+    sv_trid: &str,
+) -> Result<super::protocol::Response, super::framing::FrameError> {
+    if let Some(response) =
+        reject_unnegotiated_domain_service(stream, limits, state, cl_trid, sv_trid).await?
+    {
+        return Ok(response);
+    }
+    let Some(cipher) = cipher else {
+        return super::protocol::send_response(
+            stream,
+            limits,
+            super::protocol::COMMAND_ERROR,
+            "authInfo encryption is not configured",
+            cl_trid,
+            sv_trid,
+        )
+        .await;
+    };
+    match crate::application::update_domain(db, command, registrar_id, cipher, chrono::Utc::now())
+        .await
+    {
+        Ok(()) => match super::protocol::send_domain_update(stream, limits, cl_trid, sv_trid).await
+        {
+            Ok(response) => Ok(response),
+            Err(error) => {
+                let _ = crate::storage::session::mark_delivery_failed(
+                    db,
+                    transaction_id,
+                    &error.to_string(),
+                )
+                .await;
+                Err(error)
+            }
+        },
+        Err(crate::application::DomainUpdateError::NotFound) => {
+            super::protocol::send_response(
+                stream,
+                limits,
+                2303,
+                "object does not exist",
+                cl_trid,
+                sv_trid,
+            )
+            .await
+        }
+        Err(crate::application::DomainUpdateError::AuthInfo) => {
+            super::protocol::send_response(
+                stream,
+                limits,
+                2202,
+                "invalid authorization information",
+                cl_trid,
+                sv_trid,
+            )
+            .await
+        }
+        Err(crate::application::DomainUpdateError::ClientUpdateProhibited) => {
+            super::protocol::send_response(
+                stream,
+                limits,
+                2304,
+                "object status prohibits operation",
+                cl_trid,
+                sv_trid,
+            )
+            .await
+        }
+        Err(error) => {
+            super::protocol::send_response(
+                stream,
+                limits,
+                2306,
+                &error.to_string(),
+                cl_trid,
+                sv_trid,
+            )
+            .await
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn execute_contact_create(
     stream: &mut TlsStream<TcpStream>,
     limits: &super::framing::FrameLimits,
