@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Extended the external mTLS smoke client with a complete Domain lifecycle:
+  check, create, info, nameserver/authInfo update, delete and final check.
 - Implemented `domain:delete` with sponsoring-registrar authorization,
   client/server delete-prohibited checks, atomic removal of Domain-owned
   records and preservation of associated Contacts.

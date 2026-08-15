@@ -19,6 +19,7 @@ from xml.sax.saxutils import escape
 
 EPP_NS = "urn:ietf:params:xml:ns:epp-1.0"
 CONTACT_NS = "urn:ietf:params:xml:ns:contact-1.0"
+DOMAIN_NS = "urn:ietf:params:xml:ns:domain-1.0"
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,15 @@ class ContactFixture:
     updated_voice: str = "+79990000000"
     updated_organization: str = "EPP Lab Smoke Test"
     updated_city: str = "Saint Petersburg"
+
+
+@dataclass(frozen=True)
+class DomainFixture:
+    name: str
+    auth_info: str
+    updated_auth_info: str
+    nameserver: str = "ns1.external.example"
+    updated_nameserver: str = "ns2.external.example"
 
 
 def frame(payload: bytes) -> bytes:
@@ -60,10 +70,17 @@ def contact_fixture(require_existing: bool = False) -> ContactFixture:
     )
 
 
+def domain_fixture() -> DomainFixture:
+    name = os.getenv("EPP_DOMAIN_NAME", f"smoke-{uuid.uuid4().hex[:10]}.com")
+    auth_info = os.getenv("EPP_DOMAIN_AUTHINFO", f"domain-{uuid.uuid4().hex}")
+    return DomainFixture(name, auth_info, f"updated-{uuid.uuid4().hex}")
+
+
 def command_xml(
     command: str,
     cl_trid: str,
     contact: ContactFixture | None = None,
+    domain: DomainFixture | None = None,
     client_id: str | None = None,
     password: str | None = None,
 ) -> bytes:
@@ -84,6 +101,39 @@ def command_xml(
     if command == "hello":
         return f'''<?xml version="1.0"?>
 <epp xmlns="{EPP_NS}"><command><hello/></command></epp>'''.encode()
+    if command.startswith("domain:"):
+        if domain is None:
+            raise ValueError(f"{command} requires a domain fixture")
+        name = escape(domain.name)
+        if command == "domain:check":
+            return f'''<?xml version="1.0"?><epp xmlns="{EPP_NS}"><command><check>
+<domain:check xmlns:domain="{DOMAIN_NS}"><domain:name>{name}</domain:name></domain:check>
+</check><clTRID>{escape(cl_trid)}</clTRID></command></epp>'''.encode()
+        if command == "domain:create":
+            registrant = os.getenv("EPP_DOMAIN_REGISTRANT", "")
+            registrant_xml = f"<domain:registrant>{escape(registrant)}</domain:registrant>" if registrant else ""
+            return f'''<?xml version="1.0"?><epp xmlns="{EPP_NS}"><command><create>
+<domain:create xmlns:domain="{DOMAIN_NS}"><domain:name>{name}</domain:name>
+<domain:ns><domain:hostAttr><domain:hostName>{escape(domain.nameserver)}</domain:hostName></domain:hostAttr></domain:ns>
+{registrant_xml}<domain:authInfo><domain:pw>{escape(domain.auth_info)}</domain:pw></domain:authInfo>
+</domain:create></create><clTRID>{escape(cl_trid)}</clTRID></command></epp>'''.encode()
+        if command == "domain:info":
+            return f'''<?xml version="1.0"?><epp xmlns="{EPP_NS}"><command><info>
+<domain:info xmlns:domain="{DOMAIN_NS}"><domain:name>{name}</domain:name>
+</domain:info></info><clTRID>{escape(cl_trid)}</clTRID></command></epp>'''.encode()
+        if command == "domain:update":
+            return f'''<?xml version="1.0"?><epp xmlns="{EPP_NS}"><command><update>
+<domain:update xmlns:domain="{DOMAIN_NS}"><domain:name>{name}</domain:name>
+<domain:add><domain:ns><domain:hostAttr><domain:hostName>{escape(domain.updated_nameserver)}</domain:hostName></domain:hostAttr></domain:ns></domain:add>
+<domain:rem><domain:ns><domain:hostAttr><domain:hostName>{escape(domain.nameserver)}</domain:hostName></domain:hostAttr></domain:ns></domain:rem>
+<domain:chg><domain:authInfo><domain:pw>{escape(domain.updated_auth_info)}</domain:pw></domain:authInfo></domain:chg>
+</domain:update></update><clTRID>{escape(cl_trid)}</clTRID></command></epp>'''.encode()
+        if command == "domain:delete":
+            return f'''<?xml version="1.0"?><epp xmlns="{EPP_NS}"><command><delete>
+<domain:delete xmlns:domain="{DOMAIN_NS}"><domain:name>{name}</domain:name></domain:delete>
+</delete><clTRID>{escape(cl_trid)}</clTRID></command></epp>'''.encode()
+        raise ValueError(f"unsupported command: {command}")
+
     if contact is None:
         raise ValueError(f"{command} requires a contact fixture")
 
@@ -138,9 +188,9 @@ def response_code(response: str) -> str:
     return result.attrib["code"] if result is not None else "unknown"
 
 
-def send_command(sock: ssl.SSLSocket, command: str, contact: ContactFixture | None = None) -> str:
+def send_command(sock: ssl.SSLSocket, command: str, contact: ContactFixture | None = None, domain: DomainFixture | None = None) -> str:
     trid = f"client-{uuid.uuid4()}"
-    sock.sendall(frame(command_xml(command, trid, contact)))
+    sock.sendall(frame(command_xml(command, trid, contact, domain)))
     response = read_frame(sock)
     code = response_code(response)
     print(f"{command}: {code}")
@@ -185,6 +235,38 @@ def run_full_contact_cycle(sock: ssl.SSLSocket) -> None:
     verify_availability(send_command(sock, "contact:check", contact), contact, available=False)
     send_command(sock, "contact:delete", contact)
     verify_availability(send_command(sock, "contact:check", contact), contact, available=True)
+
+
+def verify_domain_info(response: str, domain: DomainFixture, updated: bool) -> None:
+    root = ElementTree.fromstring(response)
+    name = root.findtext(f".//{{{DOMAIN_NS}}}name")
+    if name != domain.name:
+        raise RuntimeError(f"domain:info returned name={name!r}; expected {domain.name!r}")
+    expected_ns = domain.updated_nameserver if updated else domain.nameserver
+    hosts = [node.text for node in root.findall(f".//{{{DOMAIN_NS}}}hostName")]
+    if expected_ns not in hosts:
+        raise RuntimeError(f"domain:info did not return nameserver {expected_ns!r}")
+
+
+def verify_domain_availability(response: str, domain: DomainFixture, available: bool) -> None:
+    root = ElementTree.fromstring(response)
+    node = root.find(f".//{{{DOMAIN_NS}}}name")
+    expected = "1" if available else "0"
+    if node is None or node.text != domain.name or node.attrib.get("avail") != expected:
+        raise RuntimeError(f"domain:check availability mismatch for {domain.name}")
+
+
+def run_full_domain_cycle(sock: ssl.SSLSocket) -> None:
+    domain = domain_fixture()
+    print(f"domain fixture: {domain.name}")
+    verify_domain_availability(send_command(sock, "domain:check", domain=domain), domain, True)
+    send_command(sock, "domain:create", domain=domain)
+    verify_domain_info(send_command(sock, "domain:info", domain=domain), domain, False)
+    send_command(sock, "domain:update", domain=domain)
+    verify_domain_info(send_command(sock, "domain:info", domain=domain), domain, True)
+    verify_domain_availability(send_command(sock, "domain:check", domain=domain), domain, False)
+    send_command(sock, "domain:delete", domain=domain)
+    verify_domain_availability(send_command(sock, "domain:check", domain=domain), domain, True)
 
 
 def main() -> None:
@@ -248,6 +330,7 @@ def main() -> None:
                         send_command(sock, command, contact)
             else:
                 run_full_contact_cycle(sock)
+                run_full_domain_cycle(sock)
 
             send_command(sock, "logout")
 
