@@ -513,6 +513,76 @@ pub(crate) async fn execute_domain_update(
 }
 
 #[allow(clippy::too_many_arguments)]
+pub(crate) async fn execute_domain_delete(
+    stream: &mut TlsStream<TcpStream>,
+    limits: &super::framing::FrameLimits,
+    db: &PgPool,
+    transaction_id: uuid::Uuid,
+    state: &crate::registry::session::SessionState,
+    command: &super::parser::DomainDeleteCommand,
+    registrar_id: uuid::Uuid,
+    cl_trid: Option<&str>,
+    sv_trid: &str,
+) -> Result<super::protocol::Response, super::framing::FrameError> {
+    if let Some(response) =
+        reject_unnegotiated_domain_service(stream, limits, state, cl_trid, sv_trid).await?
+    {
+        return Ok(response);
+    }
+    match crate::application::delete_domain(db, &command.name, registrar_id).await {
+        Ok(()) => match super::protocol::send_domain_update(stream, limits, cl_trid, sv_trid).await
+        {
+            Ok(response) => Ok(response),
+            Err(error) => {
+                let _ = crate::storage::session::mark_delivery_failed(
+                    db,
+                    transaction_id,
+                    &error.to_string(),
+                )
+                .await;
+                Err(error)
+            }
+        },
+        Err(crate::application::DomainDeleteError::NotFound) => {
+            super::protocol::send_response(
+                stream,
+                limits,
+                2303,
+                "object does not exist",
+                cl_trid,
+                sv_trid,
+            )
+            .await
+        }
+        Err(crate::application::DomainDeleteError::Unauthorized) => {
+            super::protocol::send_response(
+                stream,
+                limits,
+                2201,
+                "authorization error",
+                cl_trid,
+                sv_trid,
+            )
+            .await
+        }
+        Err(crate::application::DomainDeleteError::Prohibited) => {
+            super::protocol::send_response(
+                stream,
+                limits,
+                2304,
+                "object status prohibits operation",
+                cl_trid,
+                sv_trid,
+            )
+            .await
+        }
+        Err(error) => Err(super::framing::FrameError::Write(std::io::Error::other(
+            error,
+        ))),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn execute_contact_create(
     stream: &mut TlsStream<TcpStream>,
     limits: &super::framing::FrameLimits,

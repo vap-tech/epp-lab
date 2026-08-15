@@ -4,6 +4,9 @@
 
 ### Changed
 
+- Implemented `domain:delete` with sponsoring-registrar authorization,
+  client/server delete-prohibited checks, atomic removal of Domain-owned
+  records and preservation of associated Contacts.
 - Implemented atomic `domain:update` candidate-state processing for contacts,
   nameservers, client statuses and authInfo, including Zone policy and
   same-Zone nameserver validation plus `clientUpdateProhibited` enforcement.

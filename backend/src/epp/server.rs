@@ -405,14 +405,18 @@ async fn handle_connection(
                             .await?,
                         );
                     }
-                    crate::epp::parser::EppCommand::Domain(_) => {
+                    crate::epp::parser::EppCommand::Domain(
+                        crate::epp::parser::DomainCommand::Delete(command),
+                    ) => {
                         response = Some(
-                            crate::epp::dispatch::execute_parse_error(
+                            crate::epp::dispatch::execute_domain_delete(
                                 &mut stream,
                                 &limits,
                                 &db,
                                 transaction_id,
-                                &crate::epp::parser::ParseError::Unsupported,
+                                &session_state,
+                                &command,
+                                identity.registrar_id,
                                 cl_trid.as_deref(),
                                 &sv_trid,
                             )

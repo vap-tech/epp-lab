@@ -778,6 +778,50 @@ pub(crate) async fn update_domain(
     .ok_or(DomainUpdateError::NotFound)
 }
 
+#[derive(Debug, Error)]
+pub(crate) enum DomainDeleteError {
+    #[error("domain does not exist")]
+    NotFound,
+    #[error("authorization error")]
+    Unauthorized,
+    #[error("object status prohibits operation")]
+    Prohibited,
+    #[error("database error: {0}")]
+    Database(#[source] sqlx::Error),
+}
+
+pub(crate) async fn delete_domain(
+    db: &PgPool,
+    name: &str,
+    registrar_id: uuid::Uuid,
+) -> Result<(), DomainDeleteError> {
+    let Some(row) = crate::storage::domain::find_by_name(db, name)
+        .await
+        .map_err(DomainDeleteError::Database)?
+    else {
+        return Err(DomainDeleteError::NotFound);
+    };
+    if row.sponsoring_registrar_id != registrar_id {
+        return Err(DomainDeleteError::Unauthorized);
+    }
+    let statuses = crate::storage::domain::list_statuses(db, row.id)
+        .await
+        .map_err(DomainDeleteError::Database)?;
+    if statuses.iter().any(|status| {
+        status.status == "clientDeleteProhibited" || status.status == "serverDeleteProhibited"
+    }) {
+        return Err(DomainDeleteError::Prohibited);
+    }
+    if crate::storage::domain::delete(db, row.id)
+        .await
+        .map_err(DomainDeleteError::Database)?
+    {
+        Ok(())
+    } else {
+        Err(DomainDeleteError::NotFound)
+    }
+}
+
 pub(crate) async fn create_zone(
     db: &PgPool,
     name: &str,
