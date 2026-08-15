@@ -348,6 +348,25 @@ async fn handle_connection(
                             .await?,
                         );
                     }
+                    crate::epp::parser::EppCommand::Domain(
+                        crate::epp::parser::DomainCommand::Create(command),
+                    ) => {
+                        response = Some(
+                            crate::epp::dispatch::execute_domain_create(
+                                &mut stream,
+                                &limits,
+                                &db,
+                                transaction_id,
+                                &session_state,
+                                contact_authinfo_cipher.as_deref(),
+                                &command,
+                                identity.registrar_id,
+                                cl_trid.as_deref(),
+                                &sv_trid,
+                            )
+                            .await?,
+                        );
+                    }
                     crate::epp::parser::EppCommand::Domain(_) => {
                         response = Some(
                             crate::epp::dispatch::execute_parse_error(

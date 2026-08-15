@@ -133,6 +133,27 @@ pub struct DomainNameServer {
     pub hostname: DomainName,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Domain {
+    pub id: DomainId,
+    pub name: DomainName,
+    pub roid: DomainRoid,
+    pub zone_id: ZoneId,
+    pub sponsoring_registrar_id: Uuid,
+    pub registrant: Option<ContactId>,
+    pub contacts: DomainContacts,
+    pub nameservers: Vec<DomainNameServer>,
+    pub auth_info: String,
+    pub client_statuses: BTreeSet<DomainClientStatus>,
+    pub server_statuses: BTreeSet<DomainServerStatus>,
+    pub created_by: Uuid,
+    pub created_at: DateTime<Utc>,
+    pub updated_by: Option<Uuid>,
+    pub updated_at: Option<DateTime<Utc>>,
+    pub expires_at: DateTime<Utc>,
+    pub transferred_at: Option<DateTime<Utc>>,
+}
+
 impl DomainNameServer {
     pub fn new(hostname: DomainName) -> Self {
         Self { hostname }
@@ -287,6 +308,42 @@ pub fn effective_contacts(
         tech,
         billing,
     })
+}
+
+pub fn validate_contact_usage_for_create(
+    contacts: &DomainContacts,
+    policy: ContactUsagePolicy,
+) -> Result<(), ContactUsageViolation> {
+    let values = [
+        (
+            contacts.registrant.is_some(),
+            policy.registrant,
+            DomainContactRole::Registrant,
+        ),
+        (
+            !contacts.admin.is_empty(),
+            policy.admin,
+            DomainContactRole::Admin,
+        ),
+        (
+            !contacts.tech.is_empty(),
+            policy.tech,
+            DomainContactRole::Tech,
+        ),
+        (
+            !contacts.billing.is_empty(),
+            policy.billing,
+            DomainContactRole::Billing,
+        ),
+    ];
+    for (present, requirement, role) in values {
+        if (requirement == ContactRequirement::Forbidden && present)
+            || (requirement == ContactRequirement::Required && !present)
+        {
+            return Err(ContactUsageViolation { role });
+        }
+    }
+    Ok(())
 }
 
 fn project_single(

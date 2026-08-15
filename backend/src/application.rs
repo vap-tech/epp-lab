@@ -268,6 +268,218 @@ pub(crate) async fn check_domains(
     Ok(results)
 }
 
+#[derive(Debug, Error)]
+pub(crate) enum DomainCreateError {
+    #[error("invalid domain data: {0}")]
+    InvalidData(String),
+    #[error("domain belongs to an unsupported or inactive zone")]
+    Zone,
+    #[error("domain already exists")]
+    AlreadyExists,
+    #[error("contact does not exist")]
+    ContactNotFound,
+    #[error("contact role is not allowed by the zone policy")]
+    ContactPolicy,
+    #[error("nameserver resolves into the domain zone")]
+    SameZoneNameserver,
+    #[error("authInfo encryption failed: {0}")]
+    Encryption(#[source] crate::security::SecretCipherError),
+    #[error("database error: {0}")]
+    Database(#[source] sqlx::Error),
+}
+
+pub(crate) struct DomainCreateResult {
+    pub name: String,
+    pub created_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+}
+
+pub(crate) async fn create_domain(
+    db: &PgPool,
+    command: &crate::epp::parser::DomainCreateCommand,
+    registrar_id: uuid::Uuid,
+    cipher: &dyn crate::security::SecretCipher,
+    now: DateTime<Utc>,
+) -> Result<DomainCreateResult, DomainCreateError> {
+    use crate::domain::domain::{
+        DomainContacts, DomainName, DomainNameServer, RegistrationPeriod,
+        validate_contact_usage_for_create,
+    };
+    let name = DomainName::parse(&command.name)
+        .map_err(|error| DomainCreateError::InvalidData(error.to_string()))?;
+    let lookup = crate::application_domain::PostgresDomainZoneLookup { db };
+    let zones = lookup
+        .configured_zones()
+        .await
+        .map_err(DomainCreateError::InvalidData)?;
+    let zone = crate::domain::zone::resolve_configured_zone(name.as_str(), &zones)
+        .ok_or(DomainCreateError::Zone)?;
+    if zone.status != crate::domain::zone::ZoneStatus::Active {
+        return Err(DomainCreateError::Zone);
+    }
+    if crate::storage::domain::exists_by_name(db, name.as_str())
+        .await
+        .map_err(DomainCreateError::Database)?
+    {
+        return Err(DomainCreateError::AlreadyExists);
+    }
+    let period = match &command.period {
+        None => RegistrationPeriod::DEFAULT,
+        Some(period) if period.unit == "y" => RegistrationPeriod::years(
+            u8::try_from(period.value)
+                .map_err(|_| DomainCreateError::InvalidData("invalid period".into()))?,
+        )
+        .map_err(|error| DomainCreateError::InvalidData(error.to_string()))?,
+        Some(_) => {
+            return Err(DomainCreateError::InvalidData(
+                "only year periods are supported".into(),
+            ));
+        }
+    };
+    if command.auth_info.is_empty() {
+        return Err(DomainCreateError::InvalidData(
+            "authInfo is required".into(),
+        ));
+    }
+    let registrant = match command.registrant.as_deref() {
+        Some(roid) => crate::storage::contact::find_id_by_roid(db, roid)
+            .await
+            .map_err(DomainCreateError::Database)?
+            .map(crate::domain::contact::ContactId::new),
+        None => None,
+    };
+    if command.registrant.is_some() && registrant.is_none() {
+        return Err(DomainCreateError::ContactNotFound);
+    }
+    let mut contacts = DomainContacts {
+        registrant,
+        ..Default::default()
+    };
+    for contact in &command.contacts {
+        let Some(id) = crate::storage::contact::find_id_by_roid(db, &contact.id)
+            .await
+            .map_err(DomainCreateError::Database)?
+            .map(crate::domain::contact::ContactId::new)
+        else {
+            return Err(DomainCreateError::ContactNotFound);
+        };
+        match contact.role.as_str() {
+            "admin" => contacts.admin.push(id),
+            "tech" => contacts.tech.push(id),
+            "billing" => contacts.billing.push(id),
+            _ => {
+                return Err(DomainCreateError::InvalidData(
+                    "invalid contact role".into(),
+                ));
+            }
+        }
+    }
+    validate_contact_usage_for_create(&contacts, zone.contact_policy)
+        .map_err(|_| DomainCreateError::ContactPolicy)?;
+    let all_contacts = contacts
+        .registrant
+        .into_iter()
+        .chain(contacts.admin.iter().copied())
+        .chain(contacts.tech.iter().copied())
+        .chain(contacts.billing.iter().copied())
+        .collect::<Vec<_>>();
+    for contact_id in &all_contacts {
+        if !crate::storage::contact::exists(db, contact_id.into_uuid())
+            .await
+            .map_err(DomainCreateError::Database)?
+        {
+            return Err(DomainCreateError::ContactNotFound);
+        }
+    }
+    let nameservers = command
+        .nameservers
+        .iter()
+        .map(|hostname| {
+            DomainName::parse(hostname)
+                .map(DomainNameServer::new)
+                .map_err(|error| DomainCreateError::InvalidData(error.to_string()))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if crate::domain::domain::has_same_zone_nameserver(&nameservers, zone.id, &zones) {
+        return Err(DomainCreateError::SameZoneNameserver);
+    }
+    let id = uuid::Uuid::new_v4();
+    let expires_at = period
+        .expires_at(now)
+        .map_err(|error| DomainCreateError::InvalidData(error.to_string()))?;
+    let ciphertext = cipher
+        .encrypt(command.auth_info.as_bytes())
+        .map_err(DomainCreateError::Encryption)?;
+    let roid = format!("D{}", id.simple());
+    let domain_id = id;
+    let contact_rows = contacts
+        .registrant
+        .into_iter()
+        .map(|id| ("registrant", id))
+        .chain(contacts.admin.iter().map(|id| ("admin", *id)))
+        .chain(contacts.tech.iter().map(|id| ("tech", *id)))
+        .chain(contacts.billing.iter().map(|id| ("billing", *id)))
+        .enumerate()
+        .map(
+            |(position, (role, id))| crate::storage::domain::DomainContactRow {
+                domain_id,
+                role: role.into(),
+                contact_id: id.into_uuid(),
+                position: (position + 1) as i16,
+            },
+        )
+        .collect::<Vec<_>>();
+    let ns_rows = nameservers
+        .iter()
+        .enumerate()
+        .map(
+            |(position, ns)| crate::storage::domain::DomainNameserverRow {
+                domain_id,
+                position: (position + 1) as i16,
+                hostname: ns.hostname.as_str().to_owned(),
+            },
+        )
+        .collect::<Vec<_>>();
+    let row = crate::storage::domain::DomainRow {
+        id: domain_id,
+        name: name.as_str().into(),
+        roid,
+        zone_id: zone.id.into_uuid(),
+        sponsoring_registrar_id: registrar_id,
+        auth_info_ciphertext: ciphertext,
+        created_by: registrar_id,
+        created_at: now,
+        updated_by: None,
+        updated_at: None,
+        expires_at,
+        transferred_at: None,
+    };
+    crate::storage::domain::create(
+        db,
+        crate::storage::domain::NewDomain {
+            row: &row,
+            contacts: &contact_rows,
+            nameservers: &ns_rows,
+            statuses: &[],
+        },
+    )
+    .await
+    .map_err(|error| {
+        if let sqlx::Error::Database(database_error) = &error
+            && database_error.constraint() == Some("domains_name_key")
+        {
+            DomainCreateError::AlreadyExists
+        } else {
+            DomainCreateError::Database(error)
+        }
+    })?;
+    Ok(DomainCreateResult {
+        name: name.as_str().into(),
+        created_at: now,
+        expires_at,
+    })
+}
+
 pub(crate) async fn create_zone(
     db: &PgPool,
     name: &str,

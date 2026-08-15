@@ -4,6 +4,11 @@
 
 ### Changed
 
+- Implemented synchronous `domain:create` for active configured Zones. The
+  operation validates registration periods, Zone contact policy, Contact
+  references and resolved nameserver placement, encrypts Domain authInfo and
+  persists the Domain and its associations atomically before returning
+  `domain:creData`.
 - Implemented the first executable Domain operation: authenticated batch
   `domain:check` resolves configured Zones, distinguishes inactive and
   unsupported zones, checks persisted names, and returns RFC-style
