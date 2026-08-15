@@ -121,10 +121,19 @@ pub fn resolve_zone<'a>(
     domain_name: &str,
     zones: impl IntoIterator<Item = &'a Zone>,
 ) -> Option<&'a Zone> {
+    resolve_configured_zone(domain_name, zones).filter(|zone| zone.status == ZoneStatus::Active)
+}
+
+/// Resolves the most specific configured zone without applying its lifecycle
+/// status. Application code uses this to distinguish an unknown zone from a
+/// configured but inactive zone.
+pub fn resolve_configured_zone<'a>(
+    domain_name: &str,
+    zones: impl IntoIterator<Item = &'a Zone>,
+) -> Option<&'a Zone> {
     let domain = domain_to_ascii(domain_name).ok()?.to_ascii_lowercase();
     zones
         .into_iter()
-        .filter(|zone| zone.status == ZoneStatus::Active)
         .filter(|zone| {
             domain == zone.name.ascii() || domain.ends_with(&format!(".{}", zone.name.ascii()))
         })
@@ -190,5 +199,21 @@ mod tests {
         ];
         assert!(resolve_zone("example.ru", &zones).is_none());
         assert!(resolve_zone("notcom", &zones).is_none());
+    }
+
+    #[test]
+    fn configured_resolution_keeps_inactive_longest_match() {
+        let zones = [
+            zone("ru", ZoneStatus::Active),
+            zone("net.ru", ZoneStatus::Disabled),
+        ];
+        assert_eq!(
+            resolve_configured_zone("example.net.ru", &zones)
+                .unwrap()
+                .name
+                .ascii(),
+            "net.ru"
+        );
+        assert!(resolve_zone("example.net.ru", &zones).is_none());
     }
 }

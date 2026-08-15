@@ -1,6 +1,8 @@
 mod admin;
 mod app;
 mod application;
+#[allow(dead_code)]
+mod application_domain;
 mod config;
 pub mod domain;
 pub mod epp;
