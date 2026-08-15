@@ -4,6 +4,9 @@
 
 ### Changed
 
+- Added read-only Admin Domain API endpoints for paginated summaries and
+  details, including Zone/registrar identity, derived `ok`/`inactive` status,
+  nameservers and contact associations. Domain authInfo is never exposed.
 - Extended the external mTLS smoke client with a complete Domain lifecycle:
   check, create, info, nameserver/authInfo update, delete and final check.
 - Implemented `domain:delete` with sponsoring-registrar authorization,

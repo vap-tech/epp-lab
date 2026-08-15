@@ -40,6 +40,76 @@ pub(crate) struct DomainStatusRow {
     pub source: String,
 }
 
+#[derive(Debug, sqlx::FromRow)]
+pub(crate) struct DomainSummaryRow {
+    pub id: Uuid,
+    pub name: String,
+    pub roid: String,
+    pub zone_id: Uuid,
+    pub zone_name: String,
+    pub registrar_id: Uuid,
+    pub registrar_handle: String,
+    pub statuses: Vec<String>,
+    pub has_nameservers: bool,
+    pub expires_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+pub(crate) struct DomainListQuery {
+    pub page: i64,
+    pub page_size: i64,
+    pub search: Option<String>,
+    pub zone_id: Option<Uuid>,
+}
+
+pub(crate) async fn list_summaries(
+    pool: &PgPool,
+    query: DomainListQuery,
+) -> Result<(Vec<DomainSummaryRow>, i64), sqlx::Error> {
+    let pattern = query.search.as_ref().map(|value| format!("%{}%", value));
+    let filter = "($1::text IS NULL OR d.name ILIKE $1) AND ($2::uuid IS NULL OR d.zone_id = $2)";
+    let total: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM domains d WHERE {filter}"))
+        .bind(pattern.as_deref())
+        .bind(query.zone_id)
+        .fetch_one(pool)
+        .await?;
+    let offset = (query.page - 1) * query.page_size;
+    let rows = sqlx::query_as::<_, DomainSummaryRow>(&format!(
+        "SELECT d.id, d.name, d.roid, d.zone_id, z.ascii_name AS zone_name,
+                d.sponsoring_registrar_id AS registrar_id, r.handle AS registrar_handle,
+                COALESCE(array_agg(DISTINCT ds.status) FILTER (WHERE ds.status IS NOT NULL), ARRAY[]::text[]) AS statuses,
+                EXISTS (SELECT 1 FROM domain_nameservers dns WHERE dns.domain_id = d.id) AS has_nameservers,
+                d.expires_at, d.created_at, d.updated_at
+         FROM domains d JOIN zones z ON z.id = d.zone_id JOIN registrars r ON r.id = d.sponsoring_registrar_id
+         LEFT JOIN domain_statuses ds ON ds.domain_id = d.id WHERE {filter}
+         GROUP BY d.id, z.ascii_name, r.handle ORDER BY d.created_at DESC, d.id
+         LIMIT $3 OFFSET $4"
+    ))
+    .bind(pattern.as_deref()).bind(query.zone_id).bind(query.page_size).bind(offset)
+    .fetch_all(pool).await?;
+    Ok((rows, total))
+}
+
+pub(crate) async fn find_summary(
+    pool: &PgPool,
+    id: Uuid,
+) -> Result<Option<DomainSummaryRow>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT d.id, d.name, d.roid, d.zone_id, z.ascii_name AS zone_name,
+                d.sponsoring_registrar_id AS registrar_id, r.handle AS registrar_handle,
+                COALESCE(array_agg(DISTINCT ds.status) FILTER (WHERE ds.status IS NOT NULL), ARRAY[]::text[]) AS statuses,
+                EXISTS (SELECT 1 FROM domain_nameservers dns WHERE dns.domain_id = d.id) AS has_nameservers,
+                d.expires_at, d.created_at, d.updated_at
+         FROM domains d JOIN zones z ON z.id = d.zone_id JOIN registrars r ON r.id = d.sponsoring_registrar_id
+         LEFT JOIN domain_statuses ds ON ds.domain_id = d.id WHERE d.id = $1
+         GROUP BY d.id, z.ascii_name, r.handle",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+}
+
 pub(crate) struct NewDomain<'a> {
     pub row: &'a DomainRow,
     pub contacts: &'a [DomainContactRow],
