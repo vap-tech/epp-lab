@@ -1,6 +1,8 @@
 pub(crate) mod admin;
 pub(crate) mod certificate;
 pub(crate) mod contact;
+#[allow(dead_code)]
+pub(crate) mod domain;
 pub(crate) mod epp_queries;
 pub(crate) mod postgres;
 pub(crate) mod registrar;

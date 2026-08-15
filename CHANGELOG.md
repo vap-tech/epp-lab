@@ -4,6 +4,16 @@
 
 ### Changed
 
+- Added the Stage 5 Domain protocol foundation: namespace-aware DTO parsing for
+  check/create/info/update/delete, batch checks, periods, contact roles,
+  hostname-only hostAttr nameservers and explicit rejection of hostObj,
+  hostAddr and empty updates. Domain commands are parsed and recorded as
+  unsupported until their application handlers are implemented.
+- Added the Stage 5 Domain persistence foundation: immutable PostgreSQL
+  migration for Domain identities, contact associations, nameservers and
+  statuses, plus explicit repository rows and atomic create/delete operations.
+  Domain-owned rows cascade, while Domain-to-Contact references deliberately
+  block Contact deletion.
 - The default EPP smoke run now exercises a complete mTLS Contact lifecycle:
   create, info, one-field update, multi-field update, availability checks
   before and after deletion. It validates the returned Contact data at each

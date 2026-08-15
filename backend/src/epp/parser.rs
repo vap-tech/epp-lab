@@ -5,6 +5,9 @@ use quick_xml::{
 use std::io::Cursor;
 use thiserror::Error;
 
+const EPP_NS: &str = "urn:ietf:params:xml:ns:epp-1.0";
+const DOMAIN_NS: &str = "urn:ietf:params:xml:ns:domain-1.0";
+
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum EppCommand {
@@ -12,6 +15,7 @@ pub(crate) enum EppCommand {
     Login(LoginCommand),
     Logout,
     Contact(ContactCommand),
+    Domain(DomainCommand),
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -22,6 +26,66 @@ pub(crate) enum ContactCommand {
     Info(ContactInfoCommand),
     Update(ContactUpdateCommand),
     Delete(ContactDeleteCommand),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum DomainCommand {
+    Check(DomainCheckCommand),
+    Create(DomainCreateCommand),
+    Info(DomainInfoCommand),
+    Update(DomainUpdateCommand),
+    Delete(DomainDeleteCommand),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct DomainCheckCommand {
+    pub names: Vec<String>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct DomainContactCommand {
+    pub id: String,
+    pub role: String,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct DomainCreateCommand {
+    pub name: String,
+    pub period: Option<DomainPeriodCommand>,
+    pub nameservers: Vec<String>,
+    pub registrant: Option<String>,
+    pub contacts: Vec<DomainContactCommand>,
+    pub auth_info: String,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct DomainPeriodCommand {
+    pub value: u32,
+    pub unit: String,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct DomainInfoCommand {
+    pub name: String,
+    pub auth_info: Option<String>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct DomainUpdateCommand {
+    pub name: String,
+    pub add_nameservers: Vec<String>,
+    pub rem_nameservers: Vec<String>,
+    pub add_contacts: Vec<DomainContactCommand>,
+    pub rem_contacts: Vec<DomainContactCommand>,
+    pub add_statuses: Vec<String>,
+    pub rem_statuses: Vec<String>,
+    pub chg_registrant: crate::domain::contact::Patch<String>,
+    pub chg_auth_info: crate::domain::contact::Patch<String>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct DomainDeleteCommand {
+    pub name: String,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -102,6 +166,11 @@ impl EppCommand {
             Self::Contact(ContactCommand::Info(_)) => "contact:info",
             Self::Contact(ContactCommand::Update(_)) => "contact:update",
             Self::Contact(ContactCommand::Delete(_)) => "contact:delete",
+            Self::Domain(DomainCommand::Check(_)) => "domain:check",
+            Self::Domain(DomainCommand::Create(_)) => "domain:create",
+            Self::Domain(DomainCommand::Info(_)) => "domain:info",
+            Self::Domain(DomainCommand::Update(_)) => "domain:update",
+            Self::Domain(DomainCommand::Delete(_)) => "domain:delete",
         }
     }
 }
@@ -140,6 +209,12 @@ pub(crate) enum ParseError {
 }
 
 pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
+    if xml
+        .windows(b"urn:ietf:params:xml:ns:domain-1.0".len())
+        .any(|window| window == b"urn:ietf:params:xml:ns:domain-1.0")
+    {
+        return parse_domain_command(xml);
+    }
     let mut reader = Reader::from_reader(xml);
     reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
@@ -603,9 +678,296 @@ pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
                 cl_trid,
             })
         }
+        Some(EppCommand::Domain(_)) => Err(ParseError::Unsupported),
         None if xml.windows(9).any(|window| window == b"<command>") => Err(ParseError::Unsupported),
         None => Err(ParseError::Command),
     }
+}
+
+fn parse_domain_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
+    let mut reader = Reader::from_reader(xml);
+    reader.config_mut().trim_text(true);
+    let mut buf = Vec::new();
+    let mut path: Vec<Vec<u8>> = Vec::new();
+    let mut root_seen = false;
+    let mut cl_trid = None;
+    let mut command: Option<DomainCommand> = None;
+    let mut names = Vec::new();
+    let mut domain_name = None;
+    let mut nameservers = Vec::new();
+    let mut registrant = None;
+    let mut contacts = Vec::new();
+    let mut auth_info = None;
+    let mut period = None;
+    let mut period_value = None;
+    let mut period_unit = None;
+    let mut current_contact_role = None;
+    let mut add_nameservers = Vec::new();
+    let mut rem_nameservers = Vec::new();
+    let mut add_contacts = Vec::new();
+    let mut rem_contacts = Vec::new();
+    let mut add_statuses = Vec::new();
+    let mut rem_statuses = Vec::new();
+    let mut chg_registrant = crate::domain::contact::Patch::Unchanged;
+    let mut chg_auth_info = crate::domain::contact::Patch::Unchanged;
+    let mut in_add = false;
+    let mut in_rem = false;
+    let mut in_chg = false;
+    let mut domain_namespace_seen = false;
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(event)) => {
+                let name = event.name().as_ref().to_vec();
+                if event
+                    .attributes()
+                    .flatten()
+                    .filter_map(|attribute| attribute.unescape_value().ok())
+                    .any(|value| value == DOMAIN_NS)
+                {
+                    domain_namespace_seen = true;
+                }
+                if !root_seen {
+                    root_seen = true;
+                    if name != b"epp"
+                        || event
+                            .attributes()
+                            .flatten()
+                            .find(|attribute| attribute.key.as_ref() == b"xmlns")
+                            .and_then(|attribute| attribute.unescape_value().ok())
+                            .as_deref()
+                            != Some(EPP_NS)
+                    {
+                        return Err(ParseError::Namespace);
+                    }
+                }
+                let local = name.rsplit(|byte| *byte == b':').next().unwrap_or(&name);
+                if local == b"hostObj" || local == b"hostAddr" {
+                    return Err(ParseError::Unsupported);
+                }
+                if matches!(
+                    local,
+                    b"check" | b"create" | b"info" | b"update" | b"delete"
+                ) && !name.ends_with(b"command")
+                {
+                    command = Some(match local {
+                        b"check" => DomainCommand::Check(DomainCheckCommand { names: Vec::new() }),
+                        b"create" => DomainCommand::Create(DomainCreateCommand {
+                            name: String::new(),
+                            period: None,
+                            nameservers: Vec::new(),
+                            registrant: None,
+                            contacts: Vec::new(),
+                            auth_info: String::new(),
+                        }),
+                        b"info" => DomainCommand::Info(DomainInfoCommand {
+                            name: String::new(),
+                            auth_info: None,
+                        }),
+                        b"update" => DomainCommand::Update(DomainUpdateCommand {
+                            name: String::new(),
+                            add_nameservers: Vec::new(),
+                            rem_nameservers: Vec::new(),
+                            add_contacts: Vec::new(),
+                            rem_contacts: Vec::new(),
+                            add_statuses: Vec::new(),
+                            rem_statuses: Vec::new(),
+                            chg_registrant: Default::default(),
+                            chg_auth_info: Default::default(),
+                        }),
+                        b"delete" => DomainCommand::Delete(DomainDeleteCommand {
+                            name: String::new(),
+                        }),
+                        _ => unreachable!(),
+                    });
+                }
+                if local == b"period" {
+                    period_unit = event
+                        .attributes()
+                        .flatten()
+                        .find(|attribute| attribute.key.as_ref() == b"unit")
+                        .and_then(|attribute| attribute.unescape_value().ok())
+                        .map(|value| value.into_owned());
+                }
+                if local == b"contact" {
+                    current_contact_role = event
+                        .attributes()
+                        .flatten()
+                        .find(|attribute| attribute.key.as_ref() == b"type")
+                        .and_then(|attribute| attribute.unescape_value().ok())
+                        .map(|value| value.into_owned());
+                }
+                if local == b"add" {
+                    in_add = true;
+                } else if local == b"rem" {
+                    in_rem = true;
+                } else if local == b"chg" {
+                    in_chg = true;
+                }
+                path.push(name);
+            }
+            Ok(Event::Text(text)) => {
+                let value = text
+                    .decode()
+                    .map_err(|error| ParseError::Xml(error.to_string()))?
+                    .into_owned();
+                let local = path
+                    .last()
+                    .and_then(|name| name.rsplit(|byte| *byte == b':').next())
+                    .unwrap_or_default();
+                if local == b"clTRID" {
+                    cl_trid = Some(value);
+                } else if local == b"name" {
+                    match command {
+                        Some(DomainCommand::Check(_)) => names.push(value),
+                        Some(DomainCommand::Create(_))
+                        | Some(DomainCommand::Info(_))
+                        | Some(DomainCommand::Delete(_))
+                        | Some(DomainCommand::Update(_))
+                            if path.iter().any(|part| part.ends_with(b"domain:name")) =>
+                        {
+                            domain_name = Some(value);
+                        }
+                        _ => {}
+                    }
+                } else if local == b"hostName" {
+                    if in_rem {
+                        rem_nameservers.push(value);
+                    } else if in_add {
+                        add_nameservers.push(value);
+                    } else {
+                        nameservers.push(value);
+                    }
+                } else if local == b"registrant" {
+                    if in_chg {
+                        chg_registrant = crate::domain::contact::Patch::Set(value);
+                    } else {
+                        registrant = Some(value);
+                    }
+                } else if local == b"contact" && current_contact_role.is_some() {
+                    let role = current_contact_role.clone().unwrap_or_default();
+                    let contact = DomainContactCommand { id: value, role };
+                    if matches!(command.as_ref(), Some(DomainCommand::Create(_))) {
+                        contacts.push(contact);
+                    } else if in_rem {
+                        rem_contacts.push(contact);
+                    } else {
+                        add_contacts.push(contact);
+                    }
+                } else if local == b"pw" {
+                    if in_chg {
+                        chg_auth_info = crate::domain::contact::Patch::Set(value);
+                    } else {
+                        auth_info = Some(value);
+                    }
+                } else if local == b"period" {
+                    period_value = value.parse::<u32>().ok();
+                } else if local == b"status" {
+                    let target = if in_rem {
+                        &mut rem_statuses
+                    } else {
+                        &mut add_statuses
+                    };
+                    target.push(value);
+                }
+            }
+            Ok(Event::End(event)) => {
+                let name = event.name().as_ref().to_vec();
+                let local = name.rsplit(|byte| *byte == b':').next().unwrap_or(&name);
+                if local == b"contact" {
+                    current_contact_role = None;
+                } else if local == b"add" {
+                    in_add = false;
+                } else if local == b"rem" {
+                    in_rem = false;
+                } else if local == b"chg" {
+                    in_chg = false;
+                }
+                if local == b"period" {
+                    period = Some(DomainPeriodCommand {
+                        value: period_value.take().ok_or(ParseError::Command)?,
+                        unit: period_unit.take().ok_or(ParseError::Command)?,
+                    });
+                }
+                path.pop();
+            }
+            Ok(Event::Empty(event)) => {
+                let name = event.name().as_ref().to_vec();
+                let local = name.rsplit(|byte| *byte == b':').next().unwrap_or(&name);
+                if local == b"hostObj" || local == b"hostAddr" {
+                    return Err(ParseError::Unsupported);
+                }
+                if local == b"status"
+                    && let Some(status) = event
+                        .attributes()
+                        .flatten()
+                        .find(|attribute| attribute.key.as_ref() == b"s")
+                        .and_then(|attribute| attribute.unescape_value().ok())
+                {
+                    if in_rem {
+                        rem_statuses.push(status.into_owned());
+                    } else {
+                        add_statuses.push(status.into_owned());
+                    }
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(error) => return Err(ParseError::Xml(error.to_string())),
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    if !domain_namespace_seen {
+        return Err(ParseError::Namespace);
+    }
+
+    let command = match command.ok_or(ParseError::Command)? {
+        DomainCommand::Check(_) => DomainCommand::Check(DomainCheckCommand { names }),
+        DomainCommand::Create(_) => DomainCommand::Create(DomainCreateCommand {
+            name: domain_name.ok_or(ParseError::Command)?,
+            period,
+            nameservers,
+            registrant,
+            contacts,
+            auth_info: auth_info.ok_or(ParseError::Command)?,
+        }),
+        DomainCommand::Info(_) => DomainCommand::Info(DomainInfoCommand {
+            name: domain_name.ok_or(ParseError::Command)?,
+            auth_info,
+        }),
+        DomainCommand::Update(_) => {
+            if add_nameservers.is_empty()
+                && rem_nameservers.is_empty()
+                && add_contacts.is_empty()
+                && rem_contacts.is_empty()
+                && add_statuses.is_empty()
+                && rem_statuses.is_empty()
+                && chg_registrant.is_unchanged()
+                && chg_auth_info.is_unchanged()
+            {
+                return Err(ParseError::Command);
+            }
+            DomainCommand::Update(DomainUpdateCommand {
+                name: domain_name.ok_or(ParseError::Command)?,
+                add_nameservers,
+                rem_nameservers,
+                add_contacts,
+                rem_contacts,
+                add_statuses,
+                rem_statuses,
+                chg_registrant,
+                chg_auth_info,
+            })
+        }
+        DomainCommand::Delete(_) => DomainCommand::Delete(DomainDeleteCommand {
+            name: domain_name.ok_or(ParseError::Command)?,
+        }),
+    };
+    Ok(ParsedCommand {
+        command: EppCommand::Domain(command),
+        cl_trid,
+    })
 }
 
 fn postal_values(
@@ -863,6 +1225,110 @@ mod tests {
         assert_eq!(create.auth_info, "secret");
         assert_eq!(create.disclose_flag.as_deref(), Some("1"));
         assert_eq!(create.disclose_fields, ["email"]);
+    }
+
+    #[test]
+    fn parses_domain_batch_check() {
+        let parsed = parse_command(
+            br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><check><domain:check xmlns:domain="urn:ietf:params:xml:ns:domain-1.0"><domain:name>one.com</domain:name><domain:name>two.net</domain:name></domain:check></check><clTRID>check-1</clTRID></command></epp>"#,
+        )
+        .unwrap();
+        assert_eq!(
+            parsed.command,
+            EppCommand::Domain(DomainCommand::Check(DomainCheckCommand {
+                names: vec!["one.com".into(), "two.net".into()]
+            }))
+        );
+        assert_eq!(parsed.cl_trid.as_deref(), Some("check-1"));
+    }
+
+    #[test]
+    fn parses_domain_create_with_period_contacts_and_host_attrs() {
+        let parsed = parse_command(
+            br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><create><domain:create xmlns:domain="urn:ietf:params:xml:ns:domain-1.0"><domain:name>example.com</domain:name><domain:period unit="y">2</domain:period><domain:ns><domain:hostAttr><domain:hostName>ns1.example.net</domain:hostName></domain:hostAttr><domain:hostAttr><domain:hostName>ns2.example.net</domain:hostName></domain:hostAttr></domain:ns><domain:registrant>C123</domain:registrant><domain:contact type="admin">C124</domain:contact><domain:authInfo><domain:pw>secret</domain:pw></domain:authInfo></domain:create></create></command></epp>"#,
+        )
+        .unwrap();
+        let EppCommand::Domain(DomainCommand::Create(create)) = parsed.command else {
+            panic!("expected domain:create");
+        };
+        assert_eq!(create.name, "example.com");
+        assert_eq!(
+            create.period,
+            Some(DomainPeriodCommand {
+                value: 2,
+                unit: "y".into()
+            })
+        );
+        assert_eq!(create.nameservers, ["ns1.example.net", "ns2.example.net"]);
+        assert_eq!(create.registrant.as_deref(), Some("C123"));
+        assert_eq!(
+            create.contacts,
+            [DomainContactCommand {
+                id: "C124".into(),
+                role: "admin".into()
+            }]
+        );
+        assert_eq!(create.auth_info, "secret");
+    }
+
+    #[test]
+    fn parses_domain_info_auth_info_and_update_operations() {
+        let info = parse_command(
+            br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><info><domain:info xmlns:domain="urn:ietf:params:xml:ns:domain-1.0"><domain:name>example.com</domain:name><domain:authInfo><domain:pw>secret</domain:pw></domain:authInfo></domain:info></info></command></epp>"#,
+        )
+        .unwrap();
+        assert_eq!(
+            info.command,
+            EppCommand::Domain(DomainCommand::Info(DomainInfoCommand {
+                name: "example.com".into(),
+                auth_info: Some("secret".into())
+            }))
+        );
+
+        let update = parse_command(
+            br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><update><domain:update xmlns:domain="urn:ietf:params:xml:ns:domain-1.0"><domain:name>example.com</domain:name><domain:add><domain:ns><domain:hostAttr><domain:hostName>ns3.example.net</domain:hostName></domain:hostAttr></domain:ns><domain:contact type="tech">C125</domain:contact><domain:status s="clientHold"/></domain:add><domain:rem><domain:contact type="admin">C124</domain:contact><domain:status s="clientTransferProhibited"/></domain:rem><domain:chg><domain:registrant>C126</domain:registrant><domain:authInfo><domain:pw>new-secret</domain:pw></domain:authInfo></domain:chg></domain:update></update></command></epp>"#,
+        )
+        .unwrap();
+        let EppCommand::Domain(DomainCommand::Update(update)) = update.command else {
+            panic!("expected domain:update");
+        };
+        assert_eq!(update.name, "example.com");
+        assert_eq!(update.add_nameservers, ["ns3.example.net"]);
+        assert_eq!(update.add_contacts[0].role, "tech");
+        assert_eq!(update.rem_contacts[0].id, "C124");
+        assert_eq!(update.add_statuses, ["clientHold"]);
+        assert_eq!(update.rem_statuses, ["clientTransferProhibited"]);
+        assert_eq!(
+            update.chg_registrant,
+            crate::domain::contact::Patch::Set("C126".into())
+        );
+        assert_eq!(
+            update.chg_auth_info,
+            crate::domain::contact::Patch::Set("new-secret".into())
+        );
+    }
+
+    #[test]
+    fn parses_domain_delete_and_rejects_host_objects_or_empty_update() {
+        let delete = parse_command(
+            br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><delete><domain:delete xmlns:domain="urn:ietf:params:xml:ns:domain-1.0"><domain:name>example.com</domain:name></domain:delete></delete></command></epp>"#,
+        )
+        .unwrap();
+        assert_eq!(
+            delete.command,
+            EppCommand::Domain(DomainCommand::Delete(DomainDeleteCommand {
+                name: "example.com".into()
+            }))
+        );
+
+        assert!(matches!(
+            parse_command(br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><create><domain:create xmlns:domain="urn:ietf:params:xml:ns:domain-1.0"><domain:name>example.com</domain:name><domain:hostObj>ns1.example.net</domain:hostObj><domain:authInfo><domain:pw>secret</domain:pw></domain:authInfo></domain:create></create></command></epp>"#),
+            Err(ParseError::Unsupported)
+        ));
+        assert!(matches!(
+            parse_command(br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><update><domain:update xmlns:domain="urn:ietf:params:xml:ns:domain-1.0"><domain:name>example.com</domain:name></domain:update></update></command></epp>"#),
+            Err(ParseError::Command)
+        ));
     }
 
     #[test]
