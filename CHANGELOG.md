@@ -4,6 +4,10 @@
 
 ### Changed
 
+- The default EPP smoke run now exercises a complete mTLS Contact lifecycle:
+  create, info, one-field update, multi-field update, availability checks
+  before and after deletion. It validates the returned Contact data at each
+  relevant step.
 - Completed the remaining Contact protocol edges: duplicate creates map to
   EPP `2302`, successful updates record the acting registrar, and
   `contact:info` now returns RFC creation/update metadata, optional fax and
