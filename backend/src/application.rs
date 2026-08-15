@@ -985,4 +985,83 @@ mod tests {
                 .unwrap()
         );
     }
+
+    #[ignore = "requires PostgreSQL; run through just test-with-db"]
+    #[sqlx::test(migrations = "../backend/migrations")]
+    async fn domain_fixed_decisions_are_enforced_at_the_application_boundary(pool: sqlx::PgPool) {
+        let registrar_id = uuid::Uuid::new_v4();
+        let now = chrono::Utc::now();
+        sqlx::query("INSERT INTO registrars (id, handle, name, client_id, password_hash, status, created_at, updated_at) VALUES ($1, 'TEST-DOMAIN', 'Test', 'TEST-DOMAIN', 'unused', 'active', $2, $2)")
+            .bind(registrar_id).bind(now).execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO zones (id, ascii_name, unicode_name, status, created_at, updated_at) VALUES ($1, 'com', 'com', 'active', $2, $2)")
+            .bind(uuid::Uuid::new_v4()).bind(now).execute(&pool).await.unwrap();
+        let zone_id: uuid::Uuid =
+            sqlx::query_scalar("SELECT id FROM zones WHERE ascii_name = 'com'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        sqlx::query("INSERT INTO zone_contact_policies (zone_id, registrant_requirement, admin_requirement, tech_requirement, billing_requirement, updated_at) VALUES ($1, 'forbidden', 'forbidden', 'forbidden', 'forbidden', $2)")
+            .bind(zone_id).bind(now).execute(&pool).await.unwrap();
+        let cipher = crate::security::AesGcmSecretCipher::from_hex(
+            "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+        )
+        .unwrap();
+
+        let unknown = check_domains(&pool, &["example.net".into()]).await.unwrap();
+        assert_eq!(unknown[0].reason.as_deref(), Some("Unsupported zone"));
+
+        let invalid_period = crate::epp::parser::DomainCreateCommand {
+            name: "period.example.com".into(),
+            period: Some(crate::epp::parser::DomainPeriodCommand {
+                value: 11,
+                unit: "y".into(),
+            }),
+            nameservers: vec!["ns.external.example".into()],
+            registrant: None,
+            contacts: vec![],
+            auth_info: "secret".into(),
+        };
+        assert!(matches!(
+            create_domain(&pool, &invalid_period, registrar_id, &cipher, now).await,
+            Err(DomainCreateError::InvalidData(_))
+        ));
+
+        let same_zone = crate::epp::parser::DomainCreateCommand {
+            name: "same.example.com".into(),
+            period: None,
+            nameservers: vec!["ns1.other.com".into()],
+            registrant: None,
+            contacts: vec![],
+            auth_info: "secret".into(),
+        };
+        assert!(matches!(
+            create_domain(&pool, &same_zone, registrar_id, &cipher, now).await,
+            Err(DomainCreateError::SameZoneNameserver)
+        ));
+
+        let contactless = crate::epp::parser::DomainCreateCommand {
+            name: "contactless.example.com".into(),
+            period: None,
+            nameservers: vec!["ns.external.example".into()],
+            registrant: None,
+            contacts: vec![],
+            auth_info: "secret".into(),
+        };
+        assert!(
+            create_domain(&pool, &contactless, registrar_id, &cipher, now)
+                .await
+                .is_ok()
+        );
+
+        sqlx::query("UPDATE zone_contact_policies SET registrant_requirement = 'required' WHERE zone_id = $1")
+            .bind(zone_id).execute(&pool).await.unwrap();
+        let required = crate::epp::parser::DomainCreateCommand {
+            name: "required.example.com".into(),
+            ..contactless
+        };
+        assert!(matches!(
+            create_domain(&pool, &required, registrar_id, &cipher, now).await,
+            Err(DomainCreateError::ContactPolicy)
+        ));
+    }
 }

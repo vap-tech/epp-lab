@@ -199,6 +199,23 @@ def send_command(sock: ssl.SSLSocket, command: str, contact: ContactFixture | No
     return response
 
 
+def send_expected(
+    sock: ssl.SSLSocket,
+    command: str,
+    expected_code: str,
+    contact: ContactFixture | None = None,
+    domain: DomainFixture | None = None,
+) -> str:
+    trid = f"client-{uuid.uuid4()}"
+    sock.sendall(frame(command_xml(command, trid, contact, domain)))
+    response = read_frame(sock)
+    code = response_code(response)
+    print(f"{command}: {code} (expected {expected_code})")
+    if code != expected_code:
+        raise RuntimeError(f"{command} returned {code}; expected {expected_code}")
+    return response
+
+
 def require_xml_value(response: str, tag: str, expected: str) -> None:
     value = ElementTree.fromstring(response).findtext(f".//{{{CONTACT_NS}}}{tag}")
     if value != expected:
@@ -261,6 +278,7 @@ def run_full_domain_cycle(sock: ssl.SSLSocket) -> None:
     print(f"domain fixture: {domain.name}")
     verify_domain_availability(send_command(sock, "domain:check", domain=domain), domain, True)
     send_command(sock, "domain:create", domain=domain)
+    send_expected(sock, "domain:create", "2302", domain=domain)
     verify_domain_info(send_command(sock, "domain:info", domain=domain), domain, False)
     send_command(sock, "domain:update", domain=domain)
     verify_domain_info(send_command(sock, "domain:info", domain=domain), domain, True)
