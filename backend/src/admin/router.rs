@@ -164,6 +164,8 @@ mod tests {
     async fn protects_zone_api_and_keeps_unknown_api_as_json_404(pool: PgPool) {
         let response = request(pool.clone(), "GET", "/api/zones").await;
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let response = request(pool.clone(), "GET", "/api/domains").await;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         assert_eq!(response.headers()["x-content-type-options"], "nosniff");
         assert_eq!(response.headers()["x-frame-options"], "DENY");
 
