@@ -209,9 +209,15 @@ pub(crate) enum ParseError {
 }
 
 pub(crate) fn parse_command(xml: &[u8]) -> Result<ParsedCommand, ParseError> {
+    // Do not route based on the namespace URI text alone: login carries
+    // negotiated object URIs as text and may legitimately mention Domain.
+    // Domain commands have a Domain-qualified element/namespace declaration.
     if xml
-        .windows(b"urn:ietf:params:xml:ns:domain-1.0".len())
-        .any(|window| window == b"urn:ietf:params:xml:ns:domain-1.0")
+        .windows(b"<domain:".len())
+        .any(|window| window == b"<domain:")
+        || xml
+            .windows(b"xmlns:domain=\"urn:ietf:params:xml:ns:domain-1.0\"".len())
+            .any(|window| window == b"xmlns:domain=\"urn:ietf:params:xml:ns:domain-1.0\"")
     {
         return parse_domain_command(xml);
     }
@@ -1058,6 +1064,15 @@ mod tests {
                 cl_trid: Some("abc".into()),
             }
         );
+    }
+
+    #[test]
+    fn login_can_negotiate_domain_without_being_parsed_as_domain_command() {
+        let xml = br#"<epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><command><login><clID>REG-1</clID><pw>secret</pw><options><version>1.0</version><lang>en</lang></options><svcs><objURI>urn:ietf:params:xml:ns:domain-1.0</objURI></svcs></login><clTRID>abc</clTRID></command></epp>"#;
+        assert!(matches!(
+            parse_command(xml).unwrap().command,
+            EppCommand::Login(_)
+        ));
     }
 
     #[test]
