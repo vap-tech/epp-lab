@@ -440,6 +440,81 @@ where
     })
 }
 
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn send_domain_info<S>(
+    stream: &mut S,
+    limits: &FrameLimits,
+    domain: &crate::storage::domain::DomainRow,
+    contacts: &[(String, String)],
+    nameservers: &[crate::storage::domain::DomainNameserverRow],
+    statuses: &[String],
+    auth_info: Option<&str>,
+    cl_trid: Option<&str>,
+    sv_trid: &str,
+) -> Result<Response, FrameError>
+where
+    S: AsyncWrite + Unpin,
+{
+    let contact_xml = contacts
+        .iter()
+        .map(|(role, roid)| {
+            format!(
+                r#"<domain:contact type="{}">{}</domain:contact>"#,
+                escape_xml(role),
+                escape_xml(roid)
+            )
+        })
+        .collect::<String>();
+    let ns_xml = nameservers.iter().map(|ns| format!(
+        "<domain:ns><domain:hostAttr><domain:hostName>{}</domain:hostName></domain:hostAttr></domain:ns>", escape_xml(&ns.hostname)
+    )).collect::<String>();
+    let status_xml = statuses
+        .iter()
+        .map(|status| format!("<domain:status s=\"{}\"/>", escape_xml(status)))
+        .collect::<String>();
+    let auth_xml = auth_info
+        .map(|value| {
+            format!(
+                "<domain:authInfo><domain:pw>{}</domain:pw></domain:authInfo>",
+                escape_xml(value)
+            )
+        })
+        .unwrap_or_default();
+    let trid = cl_trid
+        .map(|value| format!("<clTRID>{}</clTRID>", escape_xml(value)))
+        .unwrap_or_default();
+    let expires = format!(
+        "<domain:exDate>{}</domain:exDate>",
+        domain.expires_at.to_rfc3339()
+    );
+    let response = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?><epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><response><result code="1000"><msg>Command completed successfully</msg></result><resData><domain:infData xmlns:domain="urn:ietf:params:xml:ns:domain-1.0"><domain:name>{name}</domain:name><domain:roid>{roid}</domain:roid><domain:clID>{cl_id}</domain:clID><domain:crID>{created_by}</domain:crID><domain:crDate>{created_at}</domain:crDate>{updated}{expires}<domain:ns>{ns_xml}</domain:ns>{contact_xml}{status_xml}{auth_xml}</domain:infData></resData>{trid}<svTRID>{sv_trid}</svTRID></response></epp>"#,
+        name = escape_xml(&domain.name),
+        roid = escape_xml(&domain.roid),
+        cl_id = domain.sponsoring_registrar_id,
+        created_by = domain.created_by,
+        created_at = domain.created_at.to_rfc3339(),
+        updated = domain
+            .updated_at
+            .map(|date| format!("<domain:upDate>{}</domain:upDate>", date.to_rfc3339()))
+            .unwrap_or_default(),
+        expires = expires,
+        ns_xml = ns_xml,
+        contact_xml = contact_xml,
+        status_xml = status_xml,
+        auth_xml = auth_xml,
+        trid = trid,
+        sv_trid = escape_xml(sv_trid)
+    );
+    let persisted_xml = response.replace(&auth_xml, "");
+    write_frame(stream, response.as_bytes(), limits).await?;
+    Ok(Response {
+        persisted_xml,
+        xml: response,
+        code: Some(SUCCESS),
+    })
+}
+
 pub(crate) async fn send_contact_delete<S>(
     stream: &mut S,
     limits: &FrameLimits,

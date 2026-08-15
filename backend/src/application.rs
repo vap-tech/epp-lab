@@ -480,6 +480,57 @@ pub(crate) async fn create_domain(
     })
 }
 
+pub(crate) struct DomainInfoData {
+    pub row: crate::storage::domain::DomainRow,
+    pub contacts: Vec<crate::storage::domain::DomainContactRow>,
+    pub nameservers: Vec<crate::storage::domain::DomainNameserverRow>,
+    pub statuses: Vec<crate::storage::domain::DomainStatusRow>,
+    pub auth_info: String,
+}
+
+#[derive(Debug, Error)]
+pub(crate) enum DomainInfoError {
+    #[error("database error: {0}")]
+    Database(#[source] sqlx::Error),
+    #[error("authInfo decryption failed: {0}")]
+    Decryption(#[source] crate::security::SecretCipherError),
+    #[error("authInfo is not valid UTF-8")]
+    InvalidAuthInfo(#[source] std::string::FromUtf8Error),
+}
+
+pub(crate) async fn load_domain_info(
+    db: &PgPool,
+    name: &str,
+    cipher: &dyn crate::security::SecretCipher,
+) -> Result<Option<DomainInfoData>, DomainInfoError> {
+    let Some(row) = crate::storage::domain::find_by_name(db, name)
+        .await
+        .map_err(DomainInfoError::Database)?
+    else {
+        return Ok(None);
+    };
+    let auth_info = cipher
+        .decrypt(&row.auth_info_ciphertext)
+        .map_err(DomainInfoError::Decryption)
+        .and_then(|bytes| String::from_utf8(bytes).map_err(DomainInfoError::InvalidAuthInfo))?;
+    let contacts = crate::storage::domain::list_contacts(db, row.id)
+        .await
+        .map_err(DomainInfoError::Database)?;
+    let nameservers = crate::storage::domain::list_nameservers(db, row.id)
+        .await
+        .map_err(DomainInfoError::Database)?;
+    let statuses = crate::storage::domain::list_statuses(db, row.id)
+        .await
+        .map_err(DomainInfoError::Database)?;
+    Ok(Some(DomainInfoData {
+        row,
+        contacts,
+        nameservers,
+        statuses,
+        auth_info,
+    }))
+}
+
 pub(crate) async fn create_zone(
     db: &PgPool,
     name: &str,

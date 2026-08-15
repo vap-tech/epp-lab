@@ -4,6 +4,9 @@
 
 ### Changed
 
+- Implemented `domain:info` with sponsor/authInfo authorization, nameserver,
+  contact and status serialization, and redacted persisted responses when the
+  Domain authInfo is returned on the wire.
 - Implemented synchronous `domain:create` for active configured Zones. The
   operation validates registration periods, Zone contact policy, Contact
   references and resolved nameserver placement, encrypts Domain authInfo and

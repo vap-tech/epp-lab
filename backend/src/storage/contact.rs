@@ -192,6 +192,16 @@ pub(crate) async fn find_id_by_roid(
         .await
 }
 
+pub(crate) async fn find_roid_by_id(
+    pool: &PgPool,
+    id: Uuid,
+) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar("SELECT roid FROM contacts WHERE id = $1")
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+}
+
 #[allow(dead_code)]
 pub(crate) async fn find_identity(
     pool: &PgPool,

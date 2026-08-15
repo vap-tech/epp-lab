@@ -316,6 +316,111 @@ pub(crate) async fn execute_domain_create(
 }
 
 #[allow(clippy::too_many_arguments)]
+pub(crate) async fn execute_domain_info(
+    stream: &mut TlsStream<TcpStream>,
+    limits: &super::framing::FrameLimits,
+    db: &PgPool,
+    transaction_id: uuid::Uuid,
+    state: &crate::registry::session::SessionState,
+    cipher: Option<&dyn crate::security::SecretCipher>,
+    command: &super::parser::DomainInfoCommand,
+    registrar_id: uuid::Uuid,
+    cl_trid: Option<&str>,
+    sv_trid: &str,
+) -> Result<super::protocol::Response, super::framing::FrameError> {
+    if let Some(response) =
+        reject_unnegotiated_domain_service(stream, limits, state, cl_trid, sv_trid).await?
+    {
+        return Ok(response);
+    }
+    let Some(cipher) = cipher else {
+        return super::protocol::send_response(
+            stream,
+            limits,
+            super::protocol::COMMAND_ERROR,
+            "authInfo encryption is not configured",
+            cl_trid,
+            sv_trid,
+        )
+        .await;
+    };
+    let Some(info) = crate::application::load_domain_info(db, &command.name, cipher)
+        .await
+        .map_err(|error| super::framing::FrameError::Write(std::io::Error::other(error)))?
+    else {
+        return super::protocol::send_response(
+            stream,
+            limits,
+            2303,
+            "object does not exist",
+            cl_trid,
+            sv_trid,
+        )
+        .await;
+    };
+    let full_access = info.row.sponsoring_registrar_id == registrar_id;
+    if !full_access && command.auth_info.as_deref() != Some(info.auth_info.as_str()) {
+        return super::protocol::send_response(
+            stream,
+            limits,
+            2202,
+            "invalid authorization information",
+            cl_trid,
+            sv_trid,
+        )
+        .await;
+    }
+    let mut contacts = Vec::with_capacity(info.contacts.len());
+    for contact in &info.contacts {
+        if let Some(roid) = crate::storage::contact::find_roid_by_id(db, contact.contact_id)
+            .await
+            .map_err(|error| super::framing::FrameError::Write(std::io::Error::other(error)))?
+        {
+            contacts.push((contact.role.clone(), roid));
+        }
+    }
+    let statuses = if info.statuses.is_empty() {
+        vec![
+            if info.nameservers.is_empty() {
+                "inactive"
+            } else {
+                "ok"
+            }
+            .to_owned(),
+        ]
+    } else {
+        info.statuses
+            .iter()
+            .map(|status| status.status.clone())
+            .collect()
+    };
+    match super::protocol::send_domain_info(
+        stream,
+        limits,
+        &info.row,
+        &contacts,
+        &info.nameservers,
+        &statuses,
+        full_access.then_some(info.auth_info.as_str()),
+        cl_trid,
+        sv_trid,
+    )
+    .await
+    {
+        Ok(response) => Ok(response),
+        Err(error) => {
+            let _ = crate::storage::session::mark_delivery_failed(
+                db,
+                transaction_id,
+                &error.to_string(),
+            )
+            .await;
+            Err(error)
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn execute_contact_create(
     stream: &mut TlsStream<TcpStream>,
     limits: &super::framing::FrameLimits,
