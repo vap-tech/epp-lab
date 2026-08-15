@@ -4,6 +4,9 @@
 
 ### Changed
 
+- Added read-only Admin Domains UI: sidebar navigation, searchable list,
+  Domain detail view, status/expiration display, nameservers and contact
+  associations with dormant-state indication.
 - Added read-only Admin Domain API endpoints for paginated summaries and
   details, including Zone/registrar identity, derived `ok`/`inactive` status,
   nameservers and contact associations. Domain authInfo is never exposed.

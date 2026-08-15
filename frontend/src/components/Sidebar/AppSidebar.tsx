@@ -6,6 +6,7 @@ import {
   Gauge,
   LogOut,
   Network,
+  Globe,
   Users,
 } from "lucide-react"
 
@@ -28,6 +29,7 @@ const baseItems: Item[] = [
   { icon: ArrowRightLeft, title: "EPP Sessions", path: "/sessions" },
   { icon: ClipboardList, title: "EPP Transactions", path: "/transactions" },
   { icon: Network, title: "Zones", path: "/zones" },
+  { icon: Globe, title: "Domains", path: "/domains" },
   { icon: Contact, title: "Contacts", path: "/contacts" },
 ]
 

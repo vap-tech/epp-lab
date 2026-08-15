@@ -13,11 +13,13 @@ import { Route as LayoutRouteImport } from './routes/_layout'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LayoutIndexRouteImport } from './routes/_layout/index'
 import { Route as LayoutContactsRouteImport } from './routes/_layout/contacts'
+import { Route as LayoutDomainsRouteImport } from './routes/_layout/domains'
 import { Route as LayoutRegistrarsRouteImport } from './routes/_layout/registrars'
 import { Route as LayoutSessionsRouteImport } from './routes/_layout/sessions'
 import { Route as LayoutTransactionsRouteImport } from './routes/_layout/transactions'
 import { Route as LayoutZonesRouteImport } from './routes/_layout/zones'
 import { Route as LayoutContactsContactIdRouteImport } from './routes/_layout/contacts/$contactId'
+import { Route as LayoutDomainsDomainIdRouteImport } from './routes/_layout/domains/$domainId'
 import { Route as LayoutSessionsSessionIdRouteImport } from './routes/_layout/sessions/$sessionId'
 import { Route as LayoutTransactionsTransactionIdRouteImport } from './routes/_layout/transactions/$transactionId'
 import { Route as LayoutZonesZoneIdRouteImport } from './routes/_layout/zones/$zoneId'
@@ -39,6 +41,11 @@ const LayoutIndexRoute = LayoutIndexRouteImport.update({
 const LayoutContactsRoute = LayoutContactsRouteImport.update({
   id: '/contacts',
   path: '/contacts',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutDomainsRoute = LayoutDomainsRouteImport.update({
+  id: '/domains',
+  path: '/domains',
   getParentRoute: () => LayoutRoute,
 } as any)
 const LayoutRegistrarsRoute = LayoutRegistrarsRouteImport.update({
@@ -66,6 +73,11 @@ const LayoutContactsContactIdRoute = LayoutContactsContactIdRouteImport.update({
   path: '/$contactId',
   getParentRoute: () => LayoutContactsRoute,
 } as any)
+const LayoutDomainsDomainIdRoute = LayoutDomainsDomainIdRouteImport.update({
+  id: '/$domainId',
+  path: '/$domainId',
+  getParentRoute: () => LayoutDomainsRoute,
+} as any)
 const LayoutSessionsSessionIdRoute = LayoutSessionsSessionIdRouteImport.update({
   id: '/$sessionId',
   path: '/$sessionId',
@@ -87,11 +99,13 @@ export interface FileRoutesByFullPath {
   '/': typeof LayoutIndexRoute
   '/login': typeof LoginRoute
   '/contacts': typeof LayoutContactsRouteWithChildren
+  '/domains': typeof LayoutDomainsRouteWithChildren
   '/registrars': typeof LayoutRegistrarsRoute
   '/sessions': typeof LayoutSessionsRouteWithChildren
   '/transactions': typeof LayoutTransactionsRouteWithChildren
   '/zones': typeof LayoutZonesRouteWithChildren
   '/contacts/$contactId': typeof LayoutContactsContactIdRoute
+  '/domains/$domainId': typeof LayoutDomainsDomainIdRoute
   '/sessions/$sessionId': typeof LayoutSessionsSessionIdRoute
   '/transactions/$transactionId': typeof LayoutTransactionsTransactionIdRoute
   '/zones/$zoneId': typeof LayoutZonesZoneIdRoute
@@ -99,12 +113,14 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/contacts': typeof LayoutContactsRouteWithChildren
+  '/domains': typeof LayoutDomainsRouteWithChildren
   '/registrars': typeof LayoutRegistrarsRoute
   '/sessions': typeof LayoutSessionsRouteWithChildren
   '/transactions': typeof LayoutTransactionsRouteWithChildren
   '/zones': typeof LayoutZonesRouteWithChildren
   '/': typeof LayoutIndexRoute
   '/contacts/$contactId': typeof LayoutContactsContactIdRoute
+  '/domains/$domainId': typeof LayoutDomainsDomainIdRoute
   '/sessions/$sessionId': typeof LayoutSessionsSessionIdRoute
   '/transactions/$transactionId': typeof LayoutTransactionsTransactionIdRoute
   '/zones/$zoneId': typeof LayoutZonesZoneIdRoute
@@ -114,12 +130,14 @@ export interface FileRoutesById {
   '/_layout': typeof LayoutRouteWithChildren
   '/login': typeof LoginRoute
   '/_layout/contacts': typeof LayoutContactsRouteWithChildren
+  '/_layout/domains': typeof LayoutDomainsRouteWithChildren
   '/_layout/registrars': typeof LayoutRegistrarsRoute
   '/_layout/sessions': typeof LayoutSessionsRouteWithChildren
   '/_layout/transactions': typeof LayoutTransactionsRouteWithChildren
   '/_layout/zones': typeof LayoutZonesRouteWithChildren
   '/_layout/': typeof LayoutIndexRoute
   '/_layout/contacts/$contactId': typeof LayoutContactsContactIdRoute
+  '/_layout/domains/$domainId': typeof LayoutDomainsDomainIdRoute
   '/_layout/sessions/$sessionId': typeof LayoutSessionsSessionIdRoute
   '/_layout/transactions/$transactionId': typeof LayoutTransactionsTransactionIdRoute
   '/_layout/zones/$zoneId': typeof LayoutZonesZoneIdRoute
@@ -130,11 +148,13 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/contacts'
+    | '/domains'
     | '/registrars'
     | '/sessions'
     | '/transactions'
     | '/zones'
     | '/contacts/$contactId'
+    | '/domains/$domainId'
     | '/sessions/$sessionId'
     | '/transactions/$transactionId'
     | '/zones/$zoneId'
@@ -142,12 +162,14 @@ export interface FileRouteTypes {
   to:
     | '/login'
     | '/contacts'
+    | '/domains'
     | '/registrars'
     | '/sessions'
     | '/transactions'
     | '/zones'
     | '/'
     | '/contacts/$contactId'
+    | '/domains/$domainId'
     | '/sessions/$sessionId'
     | '/transactions/$transactionId'
     | '/zones/$zoneId'
@@ -156,12 +178,14 @@ export interface FileRouteTypes {
     | '/_layout'
     | '/login'
     | '/_layout/contacts'
+    | '/_layout/domains'
     | '/_layout/registrars'
     | '/_layout/sessions'
     | '/_layout/transactions'
     | '/_layout/zones'
     | '/_layout/'
     | '/_layout/contacts/$contactId'
+    | '/_layout/domains/$domainId'
     | '/_layout/sessions/$sessionId'
     | '/_layout/transactions/$transactionId'
     | '/_layout/zones/$zoneId'
@@ -202,6 +226,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutContactsRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/domains': {
+      id: '/_layout/domains'
+      path: '/domains'
+      fullPath: '/domains'
+      preLoaderRoute: typeof LayoutDomainsRouteImport
+      parentRoute: typeof LayoutRoute
+    }
     '/_layout/registrars': {
       id: '/_layout/registrars'
       path: '/registrars'
@@ -237,6 +268,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutContactsContactIdRouteImport
       parentRoute: typeof LayoutContactsRoute
     }
+    '/_layout/domains/$domainId': {
+      id: '/_layout/domains/$domainId'
+      path: '/$domainId'
+      fullPath: '/domains/$domainId'
+      preLoaderRoute: typeof LayoutDomainsDomainIdRouteImport
+      parentRoute: typeof LayoutDomainsRoute
+    }
     '/_layout/sessions/$sessionId': {
       id: '/_layout/sessions/$sessionId'
       path: '/$sessionId'
@@ -271,6 +309,18 @@ const LayoutContactsRouteChildren: LayoutContactsRouteChildren = {
 
 const LayoutContactsRouteWithChildren = LayoutContactsRoute._addFileChildren(
   LayoutContactsRouteChildren,
+)
+
+interface LayoutDomainsRouteChildren {
+  LayoutDomainsDomainIdRoute: typeof LayoutDomainsDomainIdRoute
+}
+
+const LayoutDomainsRouteChildren: LayoutDomainsRouteChildren = {
+  LayoutDomainsDomainIdRoute: LayoutDomainsDomainIdRoute,
+}
+
+const LayoutDomainsRouteWithChildren = LayoutDomainsRoute._addFileChildren(
+  LayoutDomainsRouteChildren,
 )
 
 interface LayoutSessionsRouteChildren {
@@ -310,6 +360,7 @@ const LayoutZonesRouteWithChildren = LayoutZonesRoute._addFileChildren(
 
 interface LayoutRouteChildren {
   LayoutContactsRoute: typeof LayoutContactsRouteWithChildren
+  LayoutDomainsRoute: typeof LayoutDomainsRouteWithChildren
   LayoutRegistrarsRoute: typeof LayoutRegistrarsRoute
   LayoutSessionsRoute: typeof LayoutSessionsRouteWithChildren
   LayoutTransactionsRoute: typeof LayoutTransactionsRouteWithChildren
@@ -319,6 +370,7 @@ interface LayoutRouteChildren {
 
 const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutContactsRoute: LayoutContactsRouteWithChildren,
+  LayoutDomainsRoute: LayoutDomainsRouteWithChildren,
   LayoutRegistrarsRoute: LayoutRegistrarsRoute,
   LayoutSessionsRoute: LayoutSessionsRouteWithChildren,
   LayoutTransactionsRoute: LayoutTransactionsRouteWithChildren,
