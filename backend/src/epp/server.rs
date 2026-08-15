@@ -331,6 +331,23 @@ async fn handle_connection(
                             .await?,
                         );
                     }
+                    crate::epp::parser::EppCommand::Domain(
+                        crate::epp::parser::DomainCommand::Check(command),
+                    ) => {
+                        response = Some(
+                            crate::epp::dispatch::execute_domain_check(
+                                &mut stream,
+                                &limits,
+                                &db,
+                                transaction_id,
+                                &session_state,
+                                &command,
+                                cl_trid.as_deref(),
+                                &sv_trid,
+                            )
+                            .await?,
+                        );
+                    }
                     crate::epp::parser::EppCommand::Domain(_) => {
                         response = Some(
                             crate::epp::dispatch::execute_parse_error(

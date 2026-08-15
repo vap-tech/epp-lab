@@ -15,6 +15,29 @@ pub(crate) struct LoginResult {
 }
 
 const CONTACT_OBJECT_URI: &str = "urn:ietf:params:xml:ns:contact-1.0";
+const DOMAIN_OBJECT_URI: &str = "urn:ietf:params:xml:ns:domain-1.0";
+
+async fn reject_unnegotiated_domain_service(
+    stream: &mut TlsStream<TcpStream>,
+    limits: &super::framing::FrameLimits,
+    state: &crate::registry::session::SessionState,
+    cl_trid: Option<&str>,
+    sv_trid: &str,
+) -> Result<Option<super::protocol::Response>, super::framing::FrameError> {
+    if state.has_object_uri(DOMAIN_OBJECT_URI) {
+        return Ok(None);
+    }
+    super::protocol::send_response(
+        stream,
+        limits,
+        super::protocol::COMMAND_USE_ERROR,
+        "domain service was not negotiated",
+        cl_trid,
+        sv_trid,
+    )
+    .await
+    .map(Some)
+}
 
 async fn reject_unnegotiated_contact_service(
     stream: &mut TlsStream<TcpStream>,
@@ -141,6 +164,53 @@ pub(crate) async fn execute_contact_check(
         results.push((id.clone(), available));
     }
     match super::protocol::send_contact_check(stream, limits, &results, cl_trid, sv_trid).await {
+        Ok(response) => Ok(response),
+        Err(error) => {
+            let _ = crate::storage::session::mark_delivery_failed(
+                db,
+                transaction_id,
+                &error.to_string(),
+            )
+            .await;
+            Err(error)
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn execute_domain_check(
+    stream: &mut TlsStream<TcpStream>,
+    limits: &super::framing::FrameLimits,
+    db: &PgPool,
+    transaction_id: uuid::Uuid,
+    state: &crate::registry::session::SessionState,
+    command: &super::parser::DomainCheckCommand,
+    cl_trid: Option<&str>,
+    sv_trid: &str,
+) -> Result<super::protocol::Response, super::framing::FrameError> {
+    if !matches!(
+        state,
+        crate::registry::session::SessionState::Authenticated { .. }
+    ) {
+        return super::protocol::send_response(
+            stream,
+            limits,
+            super::protocol::COMMAND_ERROR,
+            "not authenticated",
+            cl_trid,
+            sv_trid,
+        )
+        .await;
+    }
+    if let Some(response) =
+        reject_unnegotiated_domain_service(stream, limits, state, cl_trid, sv_trid).await?
+    {
+        return Ok(response);
+    }
+    let results = crate::application::check_domains(db, &command.names)
+        .await
+        .map_err(|error| super::framing::FrameError::Write(std::io::Error::other(error)))?;
+    match super::protocol::send_domain_check(stream, limits, &results, cl_trid, sv_trid).await {
         Ok(response) => Ok(response),
         Err(error) => {
             let _ = crate::storage::session::mark_delivery_failed(

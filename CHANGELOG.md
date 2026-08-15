@@ -4,6 +4,10 @@
 
 ### Changed
 
+- Implemented the first executable Domain operation: authenticated batch
+  `domain:check` resolves configured Zones, distinguishes inactive and
+  unsupported zones, checks persisted names, and returns RFC-style
+  `domain:chkData` availability results with reasons.
 - Added the Stage 5 Domain protocol foundation: namespace-aware DTO parsing for
   check/create/info/update/delete, batch checks, periods, contact roles,
   hostname-only hostAttr nameservers and explicit rejection of hostObj,

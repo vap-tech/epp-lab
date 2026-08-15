@@ -5,6 +5,7 @@ use sqlx::PgPool;
 use thiserror::Error;
 
 use crate::{
+    application_domain::DomainZoneLookup,
     domain::extension::{ExtensionKey, ExtensionRegistry, ZoneExtensionAssignment},
     storage::zone,
 };
@@ -193,6 +194,78 @@ pub(crate) async fn check_contact(
     Ok(ContactCheckResult {
         available: !crate::storage::contact::exists_by_roid(db, roid).await?,
     })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DomainCheckResult {
+    pub name: String,
+    pub available: bool,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Error)]
+pub(crate) enum DomainCheckError {
+    #[error("failed to load zones: {0}")]
+    Zones(String),
+    #[error("failed to query domains: {0}")]
+    Domains(#[source] sqlx::Error),
+}
+
+pub(crate) async fn check_domains(
+    db: &PgPool,
+    names: &[String],
+) -> Result<Vec<DomainCheckResult>, DomainCheckError> {
+    let lookup = crate::application_domain::PostgresDomainZoneLookup { db };
+    let zones = lookup
+        .configured_zones()
+        .await
+        .map_err(DomainCheckError::Zones)?;
+    let mut results = Vec::with_capacity(names.len());
+    for name in names {
+        let result = match crate::domain::domain::DomainName::parse(name) {
+            Err(_) => DomainCheckResult {
+                name: name.clone(),
+                available: false,
+                reason: Some("Invalid domain name".to_owned()),
+            },
+            Ok(domain_name) => {
+                let Some(zone) =
+                    crate::domain::zone::resolve_configured_zone(domain_name.as_str(), &zones)
+                else {
+                    results.push(DomainCheckResult {
+                        name: name.clone(),
+                        available: false,
+                        reason: Some("Unsupported zone".to_owned()),
+                    });
+                    continue;
+                };
+                if zone.status != crate::domain::zone::ZoneStatus::Active {
+                    DomainCheckResult {
+                        name: name.clone(),
+                        available: false,
+                        reason: Some("Zone is inactive".to_owned()),
+                    }
+                } else if crate::storage::domain::exists_by_name(db, domain_name.as_str())
+                    .await
+                    .map_err(DomainCheckError::Domains)?
+                {
+                    DomainCheckResult {
+                        name: name.clone(),
+                        available: false,
+                        reason: Some("In use".to_owned()),
+                    }
+                } else {
+                    DomainCheckResult {
+                        name: name.clone(),
+                        available: true,
+                        reason: None,
+                    }
+                }
+            }
+        };
+        results.push(result);
+    }
+    Ok(results)
 }
 
 pub(crate) async fn create_zone(

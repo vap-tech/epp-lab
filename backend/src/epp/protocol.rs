@@ -124,6 +124,46 @@ where
     })
 }
 
+pub(crate) async fn send_domain_check<S>(
+    stream: &mut S,
+    limits: &FrameLimits,
+    results: &[crate::application::DomainCheckResult],
+    cl_trid: Option<&str>,
+    sv_trid: &str,
+) -> Result<Response, FrameError>
+where
+    S: AsyncWrite + Unpin,
+{
+    let items = results
+        .iter()
+        .map(|result| {
+            let reason = result
+                .reason
+                .as_deref()
+                .map(|value| format!("<domain:reason>{}</domain:reason>", escape_xml(value)))
+                .unwrap_or_default();
+            format!(
+                "<domain:cd><domain:name avail=\"{}\">{}</domain:name>{}</domain:cd>",
+                if result.available { "1" } else { "0" },
+                escape_xml(&result.name),
+                reason
+            )
+        })
+        .collect::<String>();
+    let trid = cl_trid
+        .map(|value| format!("<clTRID>{}</clTRID>", escape_xml(value)))
+        .unwrap_or_default();
+    let response = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?><epp xmlns="urn:ietf:params:xml:ns:epp-1.0"><response><result code="1000"><msg>Command completed successfully</msg></result><resData><domain:chkData xmlns:domain="urn:ietf:params:xml:ns:domain-1.0">{items}</domain:chkData></resData>{trid}<svTRID>{sv_trid}</svTRID></response></epp>"#
+    );
+    write_frame(stream, response.as_bytes(), limits).await?;
+    Ok(Response {
+        persisted_xml: response.clone(),
+        xml: response,
+        code: Some(SUCCESS),
+    })
+}
+
 pub(crate) async fn send_contact_create<S>(
     stream: &mut S,
     limits: &FrameLimits,
